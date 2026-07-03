@@ -1,0 +1,22 @@
+# Xcode / SwiftPM
+*.xcodeproj/
+*.xcworkspace/
+!*.xcodeproj/project.pbxproj
+DerivedData/
+build/
+.build/
+*.xcuserstate
+xcuserdata/
+
+# XcodeGen generates the project; keep project.yml as source of truth
+ScoreSheet.xcodeproj/
+
+# macOS
+.DS_Store
+
+# Misc
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
