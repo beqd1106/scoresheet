@@ -29,7 +29,13 @@ enum Appearance: String, CaseIterable, Identifiable {
 }
 
 enum AppDefaults {
-    static let pointCoefficientPer1000: Double = 1.0
-    static let chipPointCoefficient: Double = 5.0
-    static let quickPoints: [Int] = [5, 10, 15, 20, 30]
+    static let pointCoefficientPer1000: Double = 50   // 1000点 = 50pt
+    static let chipPointCoefficient: Double = 100      // チップ1枚 = 100pt
+    static let quickPoints: [Int] = [50, 100, 150, 200, 300]
+
+    // 係数入力の刻みと上限
+    static let per1000Step: Double = 50
+    static let per1000Max: Double = 1000
+    static let chipStep: Double = 100
+    static let chipMax: Double = 2000
 }

@@ -74,7 +74,9 @@ struct FinalResultView: View {
                 }
                 HairlineRule()
                 HStack {
-                    statCell("対局", r.roundPointTotal.signedPointString, Theme.pointColor(r.roundPointTotal))
+                    let roundPt = ScoreCalculator.roundPoint(rawTotal: r.roundPointTotal,
+                                                             per1000: session.pointCoefficientPer1000)
+                    statCell("対局", roundPt.signedPointString, Theme.pointColor(roundPt))
                     divider
                     statCell("チップ", r.chipPointTotal.signedPointString, Theme.pointColor(r.chipPointTotal))
                     divider

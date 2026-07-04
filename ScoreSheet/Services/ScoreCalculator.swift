@@ -34,12 +34,20 @@ enum ScoreCalculator {
 
     // MARK: - 最終集計
 
+    /// 対局ポイント（各回の入力合計）を 1000点係数で換算した pt。
+    static func roundPoint(rawTotal: Int, per1000: Double) -> Int {
+        Int((Double(rawTotal) * per1000).rounded())
+    }
+
     /// セッション全体の最終集計を算出し、総合ポイント降順で順位付けして返す。
+    /// 総合ポイント = 対局ポイント合計 × 1000点係数 + チップ枚数 × チップ係数。
     static func finalResults(for session: TableSession) -> [FinalResult] {
         let coeff = session.chipPointCoefficient
+        let per1000 = session.pointCoefficientPer1000
 
         var partials: [FinalResult] = session.participants.map { p in
-            let roundTotal = session.roundTotal(for: p.id)
+            let rawTotal = session.roundTotal(for: p.id)
+            let roundPt = roundPoint(rawTotal: rawTotal, per1000: per1000)
             let chipCount = session.chipCount(for: p.id)
             let chipTotal = chipPoint(count: chipCount, coefficient: coeff)
 
@@ -51,9 +59,9 @@ enum ScoreCalculator {
                 participantID: p.id,
                 name: p.name,
                 colorHex: p.colorHex,
-                roundPointTotal: roundTotal,
+                roundPointTotal: rawTotal,   // 各回入力の生合計（合計行に表示）
                 chipPointTotal: chipTotal,
-                grandTotal: roundTotal + chipTotal,
+                grandTotal: roundPt + chipTotal,
                 topCount: topCount,
                 averageRank: avgRank,
                 rank: 0

@@ -8,7 +8,7 @@ struct RoundInputView: View {
     let session: TableSession
     @State private var vm: RoundInputViewModel
 
-    @AppStorage(AppSettingsKey.quickPoints) private var quickPointsRaw = "5,10,15,20,30"
+    @AppStorage(AppSettingsKey.quickPoints) private var quickPointsRaw = "50,100,150,200,300"
 
     init(session: TableSession, editing round: RoundResult?, previousOrder: [UUID]?) {
         self.session = session

@@ -2,10 +2,30 @@ import SwiftUI
 
 // MARK: - 再利用コンポーネント（ノート感を余白・罫線・ラベルで表現）
 
-/// ページ背景（オフホワイトの紙面）。
+/// ページ背景（白地＋うっすら方眼グリッド）。テンパス準拠。
 struct NotePageBackground: View {
+    var spacing: CGFloat = 24
     var body: some View {
-        Theme.paper.ignoresSafeArea()
+        ZStack {
+            Theme.paper
+            Canvas { ctx, size in
+                var path = Path()
+                var x: CGFloat = 0
+                while x <= size.width {
+                    path.move(to: CGPoint(x: x, y: 0))
+                    path.addLine(to: CGPoint(x: x, y: size.height))
+                    x += spacing
+                }
+                var y: CGFloat = 0
+                while y <= size.height {
+                    path.move(to: CGPoint(x: 0, y: y))
+                    path.addLine(to: CGPoint(x: size.width, y: y))
+                    y += spacing
+                }
+                ctx.stroke(path, with: .color(Theme.grid), lineWidth: 0.5)
+            }
+        }
+        .ignoresSafeArea()
     }
 }
 
@@ -53,7 +73,7 @@ struct NoteCard<Content: View>: View {
                 RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
                     .stroke(Theme.rule, lineWidth: Theme.hairline)
             )
-            .shadow(color: Color.black.opacity(0.04), radius: 6, x: 0, y: 3)
+        // 影なし・フラット（テンパス準拠）
     }
 }
 

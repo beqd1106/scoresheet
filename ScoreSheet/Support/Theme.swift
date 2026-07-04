@@ -1,49 +1,38 @@
 import SwiftUI
 
 // MARK: - デザイントークン
-// コンセプト：大人が日常使いできる「上品な記録ノート」。
-// オフホワイトの紙面・極細の罫線・ネイビー/くすんだブルー/深緑の差し色。
-// ライトを基本にダークでも雰囲気を壊さない。色数は3〜4色に抑える。
+// コンセプト（テンパス準拠）：白い方眼ノート × クリーン／フラット。
+// 純白背景＋うっすら方眼グリッド、影なし、細い罫線、赤/青/黄の原色をポイント使い。
+// 「雀荘っぽさ（緑・和紙・金）」は避ける。ライト基本、ダークでも雰囲気維持。
 
 enum Theme {
 
-    // MARK: 紙面・インク（背景と文字）
-    /// ページ全体の背景（生成りに近いオフホワイト）。
-    static let paper       = Color(light: "F7F4EC", dark: "16181C")
-    /// カード＝ノートの1ページ（やや明るい紙）。
-    static let card        = Color(light: "FFFFFF", dark: "1F2228")
-    /// 沈んだ区画（ヘッダー帯・入力欄など）。
-    static let sunken      = Color(light: "F1EDE2", dark: "24272E")
+    // MARK: 紙面・インク
+    static let paper       = Color(light: "FFFFFF", dark: "111318")
+    static let card        = Color(light: "FFFFFF", dark: "1A1D23")
+    static let sunken      = Color(light: "F2F4F8", dark: "20242B")
 
-    /// 主要テキスト（黒に近いネイビー寄り）。
-    static let ink         = Color(light: "1F2A37", dark: "ECEAE3")
-    /// 補助テキスト。
-    static let inkSecond   = Color(light: "5B6673", dark: "A7ADB6")
-    /// さらに弱いテキスト・プレースホルダ。
-    static let inkFaint    = Color(light: "97A0AB", dark: "6E757E")
+    static let ink         = Color(light: "1B1E23", dark: "ECEEF2")
+    static let inkSecond   = Color(light: "5A616B", dark: "A6ADB6")
+    static let inkFaint    = Color(light: "9AA1AB", dark: "6E757E")
 
-    // MARK: 罫線（繊細に）
-    /// 汎用の極細罫線（温かみのある薄グレー）。
-    static let rule        = Color(light: "E6E1D4", dark: "2E323A")
-    /// 淡いブルーの区切り（ノートの罫線感）。
-    static let ruleBlue    = Color(light: "DCE3EA", dark: "313742")
+    // MARK: 罫線・方眼
+    static let rule        = Color(light: "E2E4EA", dark: "2C313A")
+    static let grid        = Color(light: "E7E9EF", dark: "252A32")  // 方眼グリッド線
+    static let ruleBlue    = Color(light: "DDE6F5", dark: "2A3340")
     static let hairline: CGFloat = 1
 
-    // MARK: 差し色（アクセント）
-    /// ネイビー：主役ボタン・見出しのアクセント。
-    static let accent      = Color(light: "23395B", dark: "8AA6C6")
-    /// くすんだブルー。
-    static let mutedBlue   = Color(light: "4A6C8C", dark: "7EA0C4")
-    /// 深めのグリーン。
-    static let deepGreen   = Color(light: "2F5D50", dark: "77A99A")
-    /// 落ち着いたベージュ（バッジ・補助）。
-    static let beige       = Color(light: "C9B896", dark: "9C8C68")
+    // MARK: 原色アクセント
+    static let accent      = Color(light: "1F63E0", dark: "6BA0FF")  // 青（主役）
+    static let mutedBlue   = Color(light: "3B6FD4", dark: "7FA8F0")
+    static let accentRed   = Color(light: "E2413F", dark: "F0837C")
+    static let accentYellow = Color(light: "E5A812", dark: "F0BE45")
+    static let deepGreen   = Color(light: "2E7D6B", dark: "6FBCA9")  // 互換用（ほぼ不使用）
+    static let beige       = Color(light: "B7A17A", dark: "9C8C68")  // 互換用
 
-    // MARK: 数値の符号色（強すぎない）
-    /// プラス：落ち着いた青。
-    static let positive    = Color(light: "2F5D8A", dark: "7EA9D6")
-    /// マイナス：強すぎない赤茶。
-    static let negative    = Color(light: "A24B3C", dark: "D19488")
+    // MARK: 数値の符号色（＋青 / −赤）
+    static let positive    = Color(light: "1F63E0", dark: "6BA0FF")
+    static let negative    = Color(light: "E2413F", dark: "F0837C")
 
     static func pointColor(_ value: Int) -> Color {
         if value > 0 { return positive }
@@ -51,24 +40,24 @@ enum Theme {
         return inkFaint
     }
 
-    // MARK: 順位バッジ色（派手にしない）
+    // MARK: 順位バッジ色（原色ベース・フラット）
     static func rankColor(_ rank: Int) -> Color {
         switch rank {
-        case 1:  return accent      // ネイビー
-        case 2:  return mutedBlue
-        case 3:  return deepGreen
-        default: return Color(light: "8A8577", dark: "8A8F98")
+        case 1:  return accent          // 青
+        case 2:  return Color(light: "6B7280", dark: "9AA1AB")  // スレート
+        case 3:  return accentYellow    // 黄
+        default: return Color(light: "A0A6AE", dark: "7C828B")  // グレー
         }
     }
 
-    /// プレイヤーに割り当てる控えめなカラーパレット。
+    /// プレイヤーに割り当てる控えめカラー。
     static let playerPalette: [String] = [
-        "23395B", // ネイビー
-        "2F5D50", // 深緑
-        "8C5A3C", // ブラウン
-        "4A6C8C", // くすんだブルー
+        "1F63E0", // 青
+        "E2413F", // 赤
+        "E5A812", // 黄
+        "2E7D6B", // ティール
         "6A5A7A", // すみれ
-        "7A6A45", // ベージュブラウン
+        "8C5A3C", // ブラウン
     ]
 }
 
@@ -85,29 +74,25 @@ enum Space {
 }
 
 enum Radius {
-    static let card:    CGFloat = 14   // 丸すぎない自然な角丸
+    static let card:    CGFloat = 14
     static let control: CGFloat = 10
     static let small:   CGFloat = 8
     static let pill:    CGFloat = 999
 }
 
 // MARK: - タイポグラフィ
-// 見出し：セリフでほんの少しノート感／本文：サンセリフ／数値：等幅数字で視認性最優先。
+// 見出し：やや太めサンセリフ／本文：サンセリフ／数値：等幅で視認性最優先。
 
 enum AppFont {
-    /// ページ見出し（インデックスラベル風）。
     static func label(_ size: CGFloat = 13) -> Font {
-        .system(size: size, weight: .semibold, design: .serif)
+        .system(size: size, weight: .semibold)
     }
-    /// セクション大見出し。
     static func heading(_ size: CGFloat = 20) -> Font {
-        .system(size: size, weight: .bold, design: .serif)
+        .system(size: size, weight: .bold)
     }
-    /// スコア・順位の数値（等幅）。
     static func number(_ size: CGFloat, weight: Font.Weight = .semibold) -> Font {
         .system(size: size, weight: weight, design: .rounded).monospacedDigit()
     }
-    /// 本文。
     static func body(_ size: CGFloat = 15, weight: Font.Weight = .regular) -> Font {
         .system(size: size, weight: weight)
     }
@@ -116,7 +101,6 @@ enum AppFont {
 // MARK: - Color 補助
 
 extension Color {
-    /// ライト/ダークで切り替わる動的カラー。
     init(light: String, dark: String) {
         self = Color(UIColor { tc in
             UIColor(Color(hex: tc.userInterfaceStyle == .dark ? dark : light))
@@ -137,7 +121,6 @@ extension Color {
     }
 }
 
-/// プラス記号付き整数（0 は "0"、負は "-" 付き）。
 extension Int {
     var signedPointString: String { self > 0 ? "+\(self)" : "\(self)" }
 }

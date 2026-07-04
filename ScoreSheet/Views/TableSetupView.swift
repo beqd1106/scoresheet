@@ -67,10 +67,12 @@ struct TableSetupView: View {
                     // 係数
                     VStack(alignment: .leading, spacing: Space.md) {
                         SectionLabel(text: "ポイント係数")
-                        coefficientRow(title: "チップ 1枚あたり", value: $vm.chipPointCoefficient, suffix: "pt")
+                        coefficientRow(title: "チップ 1枚あたり", value: $vm.chipPointCoefficient,
+                                       step: AppDefaults.chipStep, maxV: AppDefaults.chipMax)
                         HairlineRule()
-                        coefficientRow(title: "1000点あたり（補助）", value: $vm.pointCoefficientPer1000, suffix: "pt")
-                        Text("対局ごとのポイントは手入力が基本です。1000点係数は持ち点から換算したい時の補助です。")
+                        coefficientRow(title: "1000点あたり", value: $vm.pointCoefficientPer1000,
+                                       step: AppDefaults.per1000Step, maxV: AppDefaults.per1000Max)
+                        Text("総合計 = 対局ポイント×1000点係数 ＋ チップ枚数×チップ係数")
                             .font(AppFont.body(12)).foregroundStyle(Theme.inkFaint)
                     }
                 }
@@ -130,14 +132,14 @@ struct TableSetupView: View {
         .opacity(!vm.isSelected(player.id) && vm.selectedPlayerIDs.count >= vm.requiredCount ? 0.4 : 1)
     }
 
-    private func coefficientRow(title: String, value: Binding<Double>, suffix: String) -> some View {
+    private func coefficientRow(title: String, value: Binding<Double>, step: Double, maxV: Double) -> some View {
         HStack {
             Text(title).font(AppFont.body(15)).foregroundStyle(Theme.ink)
             Spacer()
-            Stepper("", value: value, in: 0...100, step: 1).labelsHidden()
-            Text("\(Int(value.wrappedValue)) \(suffix)")
-                .font(AppFont.number(16, weight: .semibold)).foregroundStyle(Theme.mutedBlue)
-                .frame(width: 56, alignment: .trailing)
+            Stepper("", value: value, in: 0...maxV, step: step).labelsHidden()
+            Text("\(Int(value.wrappedValue)) pt")
+                .font(AppFont.number(16, weight: .semibold)).foregroundStyle(Theme.accent)
+                .frame(width: 72, alignment: .trailing)
         }
     }
 

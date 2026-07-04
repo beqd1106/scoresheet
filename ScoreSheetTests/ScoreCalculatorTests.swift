@@ -54,15 +54,16 @@ final class ScoreCalculatorTests: XCTestCase {
         // 総合の合計は 0（ゼロサム）
         XCTAssertEqual(results.reduce(0) { $0 + $1.grandTotal }, 0)
 
-        // 順位: B(+58) > A(-8) > D(-15) > C(-35)
-        XCTAssertEqual(results.map(\.name), ["B", "A", "D", "C"])
+        // per1000=50(既定), チップ係数=5。総合 = 生合計×50 + チップ枚数×5。
+        // B 43×50+3×5=2165 / D 0-3×5=-15 / A -18×50+2×5=-890 / C -25×50-2×5=-1260
+        XCTAssertEqual(results.map(\.name), ["B", "D", "A", "C"])
         let byName = Dictionary(uniqueKeysWithValues: results.map { ($0.name, $0) })
-        XCTAssertEqual(byName["B"]?.grandTotal, 58)
-        XCTAssertEqual(byName["A"]?.grandTotal, -8)
+        XCTAssertEqual(byName["B"]?.grandTotal, 2165)
         XCTAssertEqual(byName["D"]?.grandTotal, -15)
-        XCTAssertEqual(byName["C"]?.grandTotal, -35)
+        XCTAssertEqual(byName["A"]?.grandTotal, -890)
+        XCTAssertEqual(byName["C"]?.grandTotal, -1260)
 
-        // 対局ポイント（チップ除く）も合計0
+        // 対局ポイント（生合計）も合計0
         XCTAssertEqual(results.reduce(0) { $0 + $1.roundPointTotal }, 0)
         XCTAssertEqual(byName["B"]?.roundPointTotal, 43)
         XCTAssertEqual(byName["D"]?.roundPointTotal, 0)
@@ -81,12 +82,12 @@ final class ScoreCalculatorTests: XCTestCase {
         let results = ScoreCalculator.finalResults(for: session)
 
         XCTAssertEqual(results.reduce(0) { $0 + $1.grandTotal }, 0)
-        // 順位: X(+15) > Z(-5) > Y(-10)
+        // per1000=50, チップ係数=5。X 20×50-1×5=995 / Z 5×50-2×5=240 / Y -25×50+3×5=-1235
         XCTAssertEqual(results.map(\.name), ["X", "Z", "Y"])
         let byName = Dictionary(uniqueKeysWithValues: results.map { ($0.name, $0) })
-        XCTAssertEqual(byName["X"]?.grandTotal, 15)
-        XCTAssertEqual(byName["Z"]?.grandTotal, -5)
-        XCTAssertEqual(byName["Y"]?.grandTotal, -10)
+        XCTAssertEqual(byName["X"]?.grandTotal, 995)
+        XCTAssertEqual(byName["Z"]?.grandTotal, 240)
+        XCTAssertEqual(byName["Y"]?.grandTotal, -1235)
         // 全員トップ1回・平均順位2.0
         XCTAssertEqual(byName["X"]?.topCount, 1)
         XCTAssertEqual(byName["Y"]?.averageRank ?? 0, 2.0, accuracy: 0.001)
@@ -98,18 +99,19 @@ final class ScoreCalculatorTests: XCTestCase {
         // 総合同点 → 対局ポイントが大きい方が上位
         let p1 = Participant(name: "同点高対局", colorHex: "000000")
         let p2 = Participant(name: "同点低対局", colorHex: "111111")
-        let session = TableSession(gameType: .sanma, participants: [p1, p2, Participant(name: "調整", colorHex: "222222")], chipPointCoefficient: 1)
-        // p1: 対局+10 / チップ-10, p2: 対局-10 / チップ+10, 3人目で釣り合わせ
+        // per1000=50(既定), チップ係数=50。
+        let session = TableSession(gameType: .sanma, participants: [p1, p2, Participant(name: "調整", colorHex: "222222")], chipPointCoefficient: 50)
+        // p1: 対局+2 / チップ-2, p2: 対局-2 / チップ+2 → 両者 総合0 で同点。
         let third = session.participants[2]
         let r = RoundResult(roundNumber: 1, points: [
-            PlayerRoundPoint(participantID: p1.id, rank: 1, point: 10, isAutoCalculated: true),
-            PlayerRoundPoint(participantID: p2.id, rank: 2, point: -10, isAutoCalculated: false),
+            PlayerRoundPoint(participantID: p1.id, rank: 1, point: 2, isAutoCalculated: true),
+            PlayerRoundPoint(participantID: p2.id, rank: 2, point: -2, isAutoCalculated: false),
             PlayerRoundPoint(participantID: third.id, rank: 3, point: 0, isAutoCalculated: false),
         ])
         session.rounds.append(r)
         session.chips = [
-            ChipEntry(participantID: p1.id, chipCount: -10),
-            ChipEntry(participantID: p2.id, chipCount: 10),
+            ChipEntry(participantID: p1.id, chipCount: -2),
+            ChipEntry(participantID: p2.id, chipCount: 2),
         ]
         let results = ScoreCalculator.finalResults(for: session)
         let p1r = results.first { $0.participantID == p1.id }!

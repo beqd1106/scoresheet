@@ -4,7 +4,7 @@ struct SettingsView: View {
     @AppStorage(AppSettingsKey.defaultGameType) private var defaultGameTypeRaw = GameType.yonma.rawValue
     @AppStorage(AppSettingsKey.pointCoefficientPer1000) private var per1000 = AppDefaults.pointCoefficientPer1000
     @AppStorage(AppSettingsKey.chipPointCoefficient) private var chipCoeff = AppDefaults.chipPointCoefficient
-    @AppStorage(AppSettingsKey.quickPoints) private var quickPointsRaw = "5,10,15,20,30"
+    @AppStorage(AppSettingsKey.quickPoints) private var quickPointsRaw = "50,100,150,200,300"
     @AppStorage(AppSettingsKey.appearance) private var appearanceRaw = Appearance.system.rawValue
 
     private var defaultGameType: Binding<GameType> {
@@ -30,9 +30,9 @@ struct SettingsView: View {
                     SectionLabel(text: "ポイント係数")
                     NoteCard {
                         VStack(spacing: Space.lg) {
-                            coeffRow("チップ 1枚あたり", $chipCoeff)
+                            coeffRow("チップ 1枚あたり", $chipCoeff, AppDefaults.chipStep, AppDefaults.chipMax)
                             HairlineRule()
-                            coeffRow("1000点あたり（補助）", $per1000)
+                            coeffRow("1000点あたり", $per1000, AppDefaults.per1000Step, AppDefaults.per1000Max)
                         }
                     }
                 }
@@ -40,7 +40,7 @@ struct SettingsView: View {
                 // よく使うポイント
                 VStack(alignment: .leading, spacing: Space.sm) {
                     SectionLabel(text: "よく使うポイント（カンマ区切り）")
-                    TextField("5,10,15,20,30", text: $quickPointsRaw)
+                    TextField("50,100,150,200,300", text: $quickPointsRaw)
                         .keyboardType(.numbersAndPunctuation)
                         .textFieldStyle(.plain)
                         .padding(Space.md)
@@ -74,14 +74,14 @@ struct SettingsView: View {
         .navigationBarTitleDisplayMode(.inline)
     }
 
-    private func coeffRow(_ title: String, _ value: Binding<Double>) -> some View {
+    private func coeffRow(_ title: String, _ value: Binding<Double>, _ step: Double, _ maxV: Double) -> some View {
         HStack {
             Text(title).font(AppFont.body(15)).foregroundStyle(Theme.ink)
             Spacer()
-            Stepper("", value: value, in: 0...100, step: 1).labelsHidden()
+            Stepper("", value: value, in: 0...maxV, step: step).labelsHidden()
             Text("\(Int(value.wrappedValue)) pt")
-                .font(AppFont.number(16, weight: .semibold)).foregroundStyle(Theme.mutedBlue)
-                .frame(width: 56, alignment: .trailing)
+                .font(AppFont.number(16, weight: .semibold)).foregroundStyle(Theme.accent)
+                .frame(width: 72, alignment: .trailing)
         }
     }
 }
