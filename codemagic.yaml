@@ -5,11 +5,15 @@ workflows:
     max_build_duration: 60
     integrations:
       # カチカン等で登録済みの既存 App Store Connect API キー（チームキー）を流用。
-      # チームキーは同一チームの全アプリで共通のため新規発行不要。
       app_store_connect: AppStoreConnect
     environment:
+      # 暗黙の自動署名：Codemagic が保管中の配布証明書(+秘密鍵)と、
+      # この Bundle ID の App Store プロファイルを取得する。
+      # ※事前に Apple Developer で scoresheet 用 App Store プロファイルを1つ作成しておくこと。
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.beqd1106.scoresheet
       vars:
-        BUNDLE_ID: "com.beqd1106.scoresheet"
         XCODE_PROJECT: "ScoreSheet.xcodeproj"
         XCODE_SCHEME: "ScoreSheet"
       xcode: 16.4
@@ -24,19 +28,10 @@ workflows:
         script: |
           set -e
           brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
-          # Codemagic の $BUILD_NUMBER（自動増加）を CFBundleVersion に反映
           sed -i '' "s/CURRENT_PROJECT_VERSION: \"1\"/CURRENT_PROJECT_VERSION: \"$BUILD_NUMBER\"/" project.yml
           xcodegen generate
-      - name: 署名ファイルを取得（無ければプロファイルを自動生成）
+      - name: 署名プロファイルを適用
         script: |
-          set -e
-          keychain initialize
-          # scoresheet の App Store 用プロファイルが無ければ --create で新規作成。
-          # 配布証明書は既存のものを Codemagic が再利用する。
-          app-store-connect fetch-signing-files "$BUNDLE_ID" \
-            --type IOS_APP_STORE \
-            --create
-          keychain add-certificates
           xcode-project use-profiles
       - name: IPA をビルド
         script: |
