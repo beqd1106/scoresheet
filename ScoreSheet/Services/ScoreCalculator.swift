@@ -71,4 +71,47 @@ enum ScoreCalculator {
         for i in partials.indices { partials[i].rank = i + 1 }
         return partials
     }
+
+    // MARK: - 推移グラフ用
+
+    /// 回戦ごとの累計ポイント（対局のみ・チップ除く）を各プレイヤー分。
+    /// roundNumber 0 = 開始点(0)。以降は各回終了時点の累計。
+    static func cumulativeSeries(for session: TableSession) -> [CumulativePoint] {
+        let rounds = session.sortedRounds
+        var out: [CumulativePoint] = []
+        for p in session.participants {
+            var running = 0
+            out.append(CumulativePoint(participantID: p.id, name: p.name, colorHex: p.colorHex,
+                                       roundNumber: 0, cumulative: 0))
+            for r in rounds {
+                running += r.point(for: p.id)
+                out.append(CumulativePoint(participantID: p.id, name: p.name, colorHex: p.colorHex,
+                                           roundNumber: r.roundNumber, cumulative: running))
+            }
+        }
+        return out
+    }
+
+    /// 各プレイヤーの順位分布（rank -> 回数）。
+    static func rankDistribution(for session: TableSession) -> [UUID: [Int: Int]] {
+        var dist: [UUID: [Int: Int]] = [:]
+        for p in session.participants {
+            var counts: [Int: Int] = [:]
+            for r in session.rounds {
+                if let rank = r.rank(for: p.id) { counts[rank, default: 0] += 1 }
+            }
+            dist[p.id] = counts
+        }
+        return dist
+    }
+}
+
+/// 累計推移グラフの1点。
+struct CumulativePoint: Identifiable {
+    let id = UUID()
+    let participantID: UUID
+    let name: String
+    let colorHex: String
+    let roundNumber: Int
+    let cumulative: Int
 }

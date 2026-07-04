@@ -36,6 +36,15 @@ struct FinalResultView: View {
         .background(NotePageBackground())
         .navigationTitle("最終結果")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                NavigationLink {
+                    StatsView(session: session)
+                } label: {
+                    Image(systemName: "chart.xyaxis.line")
+                }
+            }
+        }
         .safeAreaInset(edge: .bottom) {
             HStack(spacing: Space.md) {
                 Button { copyText() } label: { Label("コピー", systemImage: "doc.on.doc") }
