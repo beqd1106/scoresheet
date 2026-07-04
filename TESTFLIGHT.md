@@ -1,44 +1,36 @@
-# TestFlight 配布手順（Codemagic）
+# TestFlight 配布手順（GitHub Actions）
 
-Mac不要。Codemagic がクラウドの Mac で「ビルド→署名→TestFlightアップロード」まで実行します。
-**API キーと Codemagic 連携はカチカン等で登録済みの `AppStoreConnect` を流用**するため、
-新規のキー発行・Codemagic登録は不要です。
+Mac不要。RankYomi と同じ **GitHub Actions（`.github/workflows/release.yml`）** で
+「ビルド → 自動署名 → TestFlight アップロード」まで実行する。Codemagic は使わない。
 
----
-
-## 済んでいること（流用・作業不要）
-- App Store Connect API キー（チームキー）… Codemagic に `AppStoreConnect` 名で登録済み
-- 署名（証明書・プロファイル）… Codemagic の自動署名で毎回生成
-- App ID `com.beqd1106.scoresheet` の登録 / App Store Connect アプリ「スコアシート」作成 … 済
-
-## 残りの作業
-
-### STEP A. Codemagic にこのリポジトリを追加（初回のみ・1クリック）
-1. https://codemagic.io/apps を開く（GitHub連携済みのはず）
-2. リポジトリ一覧に `beqd1106/scoresheet` があれば「Add application」→ iOS を選択
-   - 無ければ「Add application」→ GitHub → `scoresheet` を選択
-3. `codemagic.yaml` を自動検出するので、そのまま保存でOK（追加設定不要）
-
-### STEP B. 配布ビルドを実行（タグを push するだけ）
-```bash
-cd Downloads/ScoreSheet
-git tag v1.0.0
-git push origin v1.0.0
-```
-→ Codemagic が `ios-testflight` を自動起動。数分でビルド→署名→**TestFlightへ自動アップロード**。
-（Codemagic の画面から手動「Start new build」でも可）
-
-### STEP C. テスターに配布
-1. App Store Connect →「スコアシート」→ **TestFlight** タブ
-2. アップロードされたビルドが「処理中」→数分で有効化
-3. 内部テスト：テスターに自分のApple ID等を追加 → すぐ配布
-4. 外部テスト：グループ作成＋テスト情報入力（軽いレビューあり）
+署名は `codemagic-cli-tools` が App Store Connect API キーと固定の配布証明書秘密鍵
+（`CERTIFICATE_PRIVATE_KEY`）から、証明書とプロビジョニングを `--create` で自動用意する。
+ランナーは `macos-26`（App Store Connect が iOS 26 SDK / Xcode 26 以降を要求するため）。
 
 ---
+
+## 必要な GitHub Secrets（beqd1106/scoresheet リポジトリ）
+| Secret | 内容 | 状態 |
+|---|---|---|
+| `CERTIFICATE_PRIVATE_KEY` | 配布証明書の秘密鍵(PEM) | 設定済み（scoresheet_dist.p12 から抽出） |
+| `ASC_ISSUER_ID` | App Store Connect の Issuer ID | 要設定 |
+| `ASC_KEY_ID` | API キーの Key ID | 要設定 |
+| `ASC_KEY_P8` | API キー(.p8)の中身 | 要設定 |
+
+ASC 3種は RankYomi と同じチームキーを流用可（`Desktop/appleP8/AuthKey_*.p8`）。
+
+## 実行
+1. GitHub → Actions → `release-testflight` → **Run workflow**（`main`）
+   - もしくは `gh workflow run release-testflight.yml --repo beqd1106/scoresheet`
+2. 数分で「ビルド → 署名 → TestFlight アップロード」まで自動実行
+3. App Store Connect →「スコアシート」→ TestFlight でビルドが処理中→有効化
+
+## テスターに配布
+- 内部テスト：テスターに Apple ID を追加 → すぐ配布
+- 外部テスト：グループ作成＋テスト情報入力（軽いレビューあり）
 
 ## 補足
-- **配信タブ（スクリーンショット/審査用に追加）は一般公開用**。TestFlightには不要なので触らなくてOK。
-- **ビルド番号**は `$BUILD_NUMBER` を自動反映（再アップロードでも重複しない）。
-- **バージョン**を上げる時は `project.yml` の `MARKETING_VERSION` を変更。
-- **輸出コンプライアンス**は `ITSAppUsesNonExemptEncryption=NO` を宣言済みのため毎回の手入力は不要。
-- 追加課金なし（既存Apple Developer会員＋Codemagic無料枠）。
+- ビルド番号は GitHub の run 番号を自動反映（重複しない）。
+- バージョンを上げる時は `project.yml` の `MARKETING_VERSION` を変更。
+- 輸出コンプラは `ITSAppUsesNonExemptEncryption=NO` 宣言済み。
+- `ios.yml`（build + テスト）は push 毎に自動実行のコンパイル/回帰チェック。

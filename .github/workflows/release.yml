@@ -1,0 +1,88 @@
+name: release-testflight
+
+# 手動起動で「ビルド → 自動署名 → TestFlight アップロード」まで行う。
+# 署名は codemagic-cli-tools が App Store Connect API キーと、固定の配布証明書秘密鍵
+# (CERTIFICATE_PRIVATE_KEY) を使って証明書・プロビジョニングを自動用意する。
+#
+# 必要な GitHub Secrets:
+#   ASC_ISSUER_ID            … App Store Connect の Issuer ID (UUID)
+#   ASC_KEY_ID               … API キーの Key ID
+#   ASC_KEY_P8               … API キー(.p8)の中身
+#   CERTIFICATE_PRIVATE_KEY  … 配布証明書用の秘密鍵(PEM)
+#
+# 事前にブラウザで1回だけ: App Store Connect にアプリ枠(Bundle ID com.beqd1106.scoresheet)を作成済み。
+
+on:
+  workflow_dispatch: {}
+
+env:
+  APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+  APP_STORE_CONNECT_KEY_IDENTIFIER: ${{ secrets.ASC_KEY_ID }}
+  APP_STORE_CONNECT_PRIVATE_KEY: ${{ secrets.ASC_KEY_P8 }}
+  CERTIFICATE_PRIVATE_KEY: ${{ secrets.CERTIFICATE_PRIVATE_KEY }}
+  BUNDLE_ID: com.beqd1106.scoresheet
+
+jobs:
+  release:
+    # App Store Connect は iOS 26 SDK(Xcode 26)以降でのビルドを要求するため macos-26 を使う。
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select latest Xcode
+        run: |
+          LATEST=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          if [ -n "$LATEST" ]; then sudo xcode-select -s "$LATEST"; fi
+          xcodebuild -version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Install codemagic CLI tools
+        run: |
+          pipx install codemagic-cli-tools
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Generate Xcode project (build number = run number)
+        run: |
+          sed -i '' "s/CURRENT_PROJECT_VERSION: \"1\"/CURRENT_PROJECT_VERSION: \"${{ github.run_number }}\"/" project.yml
+          xcodegen generate
+
+      - name: Initialize keychain
+        run: keychain initialize
+
+      - name: Fetch signing files (create cert & profile if needed)
+        run: |
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --type IOS_APP_STORE \
+            --certificate-key @env:CERTIFICATE_PRIVATE_KEY \
+            --create
+
+      - name: Add certificates to keychain
+        run: keychain add-certificates
+
+      - name: Apply provisioning profiles to project
+        run: xcode-project use-profiles
+
+      - name: Build signed ipa
+        run: |
+          xcode-project build-ipa \
+            --project "ScoreSheet.xcodeproj" \
+            --scheme "ScoreSheet"
+
+      - name: Upload to TestFlight
+        run: |
+          IPA=$(find build/ios/ipa -name '*.ipa' | head -1)
+          echo "Uploading: $IPA"
+          app-store-connect publish \
+            --path "$IPA" \
+            --max-build-processing-wait 0
+
+      - name: Save build artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scoresheet-ipa
+          path: |
+            build/ios/ipa/*.ipa
+          if-no-files-found: ignore
