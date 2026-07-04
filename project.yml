@@ -13,6 +13,7 @@ settings:
     GENERATE_INFOPLIST_FILE: YES
     INFOPLIST_KEY_UILaunchScreen_Generation: YES
     INFOPLIST_KEY_CFBundleDisplayName: スコアシート
+    INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
     SWIFT_VERSION: "5.9"
     TARGETED_DEVICE_FAMILY: "1"
 targets:
