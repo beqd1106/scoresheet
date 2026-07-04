@@ -21,13 +21,13 @@ jobs:
       - name: Generate Xcode project
         run: xcodegen generate
 
-      - name: Build (iOS Simulator, no signing)
+      - name: Build & Test (iOS Simulator, no signing)
         run: |
           set -o pipefail
           xcodebuild \
             -project ScoreSheet.xcodeproj \
             -scheme ScoreSheet \
             -configuration Debug \
-            -destination 'generic/platform=iOS Simulator' \
+            -destination 'platform=iOS Simulator,name=iPhone 16' \
             CODE_SIGNING_ALLOWED=NO \
-            build
+            test
