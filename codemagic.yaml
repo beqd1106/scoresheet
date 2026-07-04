@@ -3,18 +3,18 @@ workflows:
     name: スコアシート TestFlight
     instance_type: mac_mini_m2
     max_build_duration: 60
+    integrations:
+      # カチカン等で登録済みの既存 App Store Connect API キー（チームキー）を流用。
+      # チームキーは同一チームの全アプリで共通のため新規発行不要。
+      app_store_connect: AppStoreConnect
     environment:
-      xcode: 16.4
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.beqd1106.scoresheet
       vars:
-        BUNDLE_ID: "com.beqd1106.scoresheet"
         XCODE_PROJECT: "ScoreSheet.xcodeproj"
         XCODE_SCHEME: "ScoreSheet"
-      # Codemagic の UI で登録した App Store Connect API キー（integration名: scoresheet_asc）を参照
-    integrations:
-      app_store_connect: scoresheet_asc
-    ios_signing:
-      distribution_type: app_store
-      bundle_identifier: com.beqd1106.scoresheet
+      xcode: 16.4
     triggering:
       events:
         - tag         # v1.0.0 のようなタグ push で配布ビルド
@@ -44,9 +44,6 @@ workflows:
       app_store_connect:
         auth: integration
         submit_to_testflight: true
-        # 社内テスターへ自動配布したい場合は下記を有効化（グループ名は ASC で作成しておく）
-        # beta_groups:
-        #   - スコアシート内部テスト
       email:
         recipients:
           - beqd1106@gmail.com
