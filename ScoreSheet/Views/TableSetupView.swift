@@ -12,8 +12,16 @@ struct TableSetupView: View {
 
     @State private var vm = TableSetupViewModel()
     @State private var newPlayerName = ""
+    @State private var newTag = ""
 
     let onStart: (TableSession) -> Void
+
+    private func addTag() {
+        let v = newTag.trimmingCharacters(in: .whitespaces)
+        guard !v.isEmpty, !vm.tags.contains(v) else { newTag = ""; return }
+        vm.tags.append(v)
+        newTag = ""
+    }
 
     var body: some View {
         NavigationStack {
@@ -34,7 +42,7 @@ struct TableSetupView: View {
                     VStack(alignment: .leading, spacing: Space.md) {
                         SectionLabel(text: "プレイヤー（\(vm.selectedPlayerIDs.count)/\(vm.requiredCount)）")
                         if roster.isEmpty {
-                            Text("メンバーがいません。下から追加してください。")
+                            Text("プレイヤーがいません。下から追加してください。")
                                 .font(AppFont.body(14)).foregroundStyle(Theme.inkSecond)
                         }
                         VStack(spacing: 0) {
@@ -48,7 +56,7 @@ struct TableSetupView: View {
 
                         // クイック追加
                         HStack(spacing: Space.sm) {
-                            TextField("メンバーを追加", text: $newPlayerName)
+                            TextField("プレイヤーを追加", text: $newPlayerName)
                                 .textFieldStyle(.plain)
                                 .padding(Space.md)
                                 .background(RoundedRectangle(cornerRadius: Radius.control).fill(Theme.sunken))
@@ -75,11 +83,35 @@ struct TableSetupView: View {
                         Text("総合計 = 対局ポイント×1000点係数 ＋ チップ枚数×チップ係数")
                             .font(AppFont.body(12)).foregroundStyle(Theme.inkFaint)
                     }
+
+                    // タグ（任意）
+                    VStack(alignment: .leading, spacing: Space.md) {
+                        SectionLabel(text: "タグ（任意）")
+                        if !vm.tags.isEmpty {
+                            FlowLayout {
+                                ForEach(vm.tags, id: \.self) { t in
+                                    TagChip(text: t) { vm.tags.removeAll { $0 == t } }
+                                }
+                            }
+                        }
+                        HStack(spacing: Space.sm) {
+                            TextField("例：4月定例・○○杯", text: $newTag)
+                                .textFieldStyle(.plain).padding(Space.md)
+                                .background(RoundedRectangle(cornerRadius: Radius.control).fill(Theme.sunken))
+                                .onSubmit(addTag)
+                            Button(action: addTag) {
+                                Image(systemName: "plus").font(.system(size: 16, weight: .semibold))
+                                    .frame(width: 44, height: 44).foregroundStyle(.white)
+                                    .background(RoundedRectangle(cornerRadius: Radius.control).fill(Theme.mutedBlue))
+                            }
+                            .disabled(newTag.trimmingCharacters(in: .whitespaces).isEmpty)
+                        }
+                    }
                 }
                 .padding(Space.lg)
             }
             .background(NotePageBackground())
-            .navigationTitle("新規卓")
+            .navigationTitle("新規ゲーム")
             .navigationBarTitleDisplayMode(.inline)
             .safeAreaInset(edge: .bottom) {
                 VStack(spacing: Space.sm) {

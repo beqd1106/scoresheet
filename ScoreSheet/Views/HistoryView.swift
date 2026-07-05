@@ -7,34 +7,52 @@ struct HistoryView: View {
     @Query(sort: \TableSession.date, order: .reverse) private var sessions: [TableSession]
 
     @State private var toDelete: TableSession? = nil
+    @State private var tagTarget: TableSession? = nil
     private let vm = HistoryViewModel()
 
     var body: some View {
-        ScrollView {
+        Group {
             if sessions.isEmpty {
-                EmptyNote(title: "履歴がありません",
-                          message: "卓をはじめると、ここに記録が残ります。",
-                          systemImage: "clock")
-                .padding(.top, Space.xxxl)
+                ScrollView {
+                    EmptyNote(title: "履歴がありません",
+                              message: "ゲームをはじめると、ここに記録が残ります。",
+                              systemImage: "clock")
+                    .padding(.top, Space.xxxl)
+                }
             } else {
-                VStack(spacing: Space.md) {
+                List {
                     ForEach(sessions) { session in
                         Button { path.append(session) } label: { row(session) }
                             .buttonStyle(.plain)
-                            .contextMenu {
+                            .listRowInsets(EdgeInsets(top: Space.xs, leading: Space.lg,
+                                                      bottom: Space.xs, trailing: Space.lg))
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                            .swipeActions(edge: .trailing) {
                                 Button(role: .destructive) { toDelete = session } label: {
                                     Label("削除", systemImage: "trash")
                                 }
                             }
+                            .swipeActions(edge: .leading) {
+                                Button { tagTarget = session } label: {
+                                    Label("タグ", systemImage: "tag")
+                                }.tint(Theme.accent)
+                            }
+                            .contextMenu {
+                                Button { tagTarget = session } label: { Label("タグを編集", systemImage: "tag") }
+                                Button(role: .destructive) { toDelete = session } label: { Label("削除", systemImage: "trash") }
+                            }
                     }
                 }
-                .padding(Space.lg)
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
             }
         }
         .background(NotePageBackground())
-        .navigationTitle("過去の卓")
+        .navigationTitle("過去のゲーム")
         .navigationBarTitleDisplayMode(.inline)
-        .confirmationDialog("この卓を削除しますか？", isPresented: Binding(
+        .sheet(item: $tagTarget) { TagEditSheet(session: $0) }
+        .confirmationDialog("このゲームを削除しますか？", isPresented: Binding(
             get: { toDelete != nil }, set: { if !$0 { toDelete = nil } }
         ), titleVisibility: .visible) {
             Button("削除する", role: .destructive) {
@@ -65,6 +83,11 @@ struct HistoryView: View {
                             RankBadge(rank: 1, size: 16)
                             Text(top).font(AppFont.body(13, weight: .medium)).foregroundStyle(Theme.ink)
                         }
+                    }
+                }
+                if !session.tags.isEmpty {
+                    FlowLayout(spacing: Space.xs) {
+                        ForEach(session.tags, id: \.self) { TagChip(text: $0) }
                     }
                 }
             }

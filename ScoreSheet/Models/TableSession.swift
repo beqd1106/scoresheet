@@ -11,8 +11,9 @@ final class TableSession {
     var chips: [ChipEntry]
 
     // 設定（TableSettings 相当をインラインで保持）
-    var pointCoefficientPer1000: Double  // 1000点あたり何ポイントか（補助機能）
+    var pointCoefficientPer1000: Double  // 1000点あたり何ポイントか
     var chipPointCoefficient: Double     // チップ1枚あたりのポイント係数
+    var tags: [String] = []              // 集計グルーピング用タグ
     var memo: String
 
     var createdAt: Date
@@ -25,6 +26,7 @@ final class TableSession {
          participants: [Participant],
          pointCoefficientPer1000: Double = AppDefaults.pointCoefficientPer1000,
          chipPointCoefficient: Double = AppDefaults.chipPointCoefficient,
+         tags: [String] = [],
          memo: String = "") {
         self.id = UUID()
         self.date = Date()
@@ -33,6 +35,7 @@ final class TableSession {
         self.chips = []
         self.pointCoefficientPer1000 = pointCoefficientPer1000
         self.chipPointCoefficient = chipPointCoefficient
+        self.tags = tags
         self.memo = memo
         self.createdAt = Date()
         self.updatedAt = Date()

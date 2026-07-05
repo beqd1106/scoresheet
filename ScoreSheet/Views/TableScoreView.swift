@@ -13,6 +13,7 @@ struct TableScoreView: View {
     @State private var rows: [[String]] = []
     @State private var chipText: [String] = []
     @State private var loaded = false
+    @State private var showTags = false
 
     private var participants: [Participant] { session.participants }
     private var n: Int { participants.count }
@@ -47,11 +48,15 @@ struct TableScoreView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
+                Button { showTags = true } label: { Image(systemName: "tag") }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
                 NavigationLink { FinalResultView(session: session) } label: {
                     Image(systemName: "flag.checkered")
                 }
             }
         }
+        .sheet(isPresented: $showTags) { TagEditSheet(session: session) }
         .onAppear(perform: loadIfNeeded)
         .onChange(of: rows) { _, _ in if loaded { persist() } }
         .onChange(of: chipText) { _, _ in if loaded { persist() } }
@@ -126,6 +131,8 @@ struct TableScoreView: View {
                         .font(AppFont.number(17, weight: .semibold))
                         .foregroundStyle(Theme.pointColor(cellValue(r, idx)))
                         .frame(maxWidth: .infinity)
+                        .submitLabel(.done)
+                        .onSubmit { autoBalance(r) }
                 }
             }
         }
@@ -266,6 +273,17 @@ struct TableScoreView: View {
 
     private func addRound() {
         rows.append(Array(repeating: "", count: n))
+    }
+
+    /// その回戦で空欄がちょうど1つなら、横合計が0になるよう自動補完。
+    private func autoBalance(_ r: Int) {
+        guard r < rows.count else { return }
+        let emptyIdx = rows[r].indices.filter {
+            rows[r][$0].trimmingCharacters(in: .whitespaces).isEmpty
+        }
+        guard emptyIdx.count == 1 else { return }
+        let sumOthers = rows[r].reduce(0) { $0 + (Int($1) ?? 0) }
+        rows[r][emptyIdx[0]] = "\(-sumOthers)"
     }
 
     private func deleteRound(_ r: Int) {

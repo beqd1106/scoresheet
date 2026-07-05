@@ -7,6 +7,7 @@ struct HomeView: View {
     @Query(sort: \TableSession.date, order: .reverse) private var sessions: [TableSession]
 
     @State private var showSetup = false
+    @State private var toDelete: TableSession? = nil
     private let vm = HomeViewModel()
 
     private var recent: [TableSession] { Array(sessions.prefix(3)) }
@@ -26,36 +27,43 @@ struct HomeView: View {
                 }
                 .padding(.top, Space.sm)
 
-                // 新規卓（主役）
+                // 新規ゲーム（主役）
                 Button { showSetup = true } label: {
                     HStack(spacing: Space.md) {
                         Image(systemName: "square.and.pencil")
-                        Text("新規卓をはじめる")
+                        Text("新しいゲームをはじめる")
                     }
                 }
                 .buttonStyle(PrimaryButtonStyle())
 
                 // インデックス（メニュー）
                 VStack(spacing: 0) {
-                    indexRow(icon: "clock.arrow.circlepath", title: "過去の卓", route: .history)
+                    indexRow(icon: "clock.arrow.circlepath", title: "過去のゲーム", route: .history)
                     HairlineRule().padding(.leading, 44)
-                    indexRow(icon: "person.2", title: "メンバー", route: .players)
+                    indexRow(icon: "tag", title: "タグ別成績", route: .tags)
+                    HairlineRule().padding(.leading, 44)
+                    indexRow(icon: "person.2", title: "プレイヤー", route: .players)
                     HairlineRule().padding(.leading, 44)
                     indexRow(icon: "slider.horizontal.3", title: "設定", route: .settings)
                 }
                 .background(RoundedRectangle(cornerRadius: Radius.card, style: .continuous).fill(Theme.card))
                 .overlay(RoundedRectangle(cornerRadius: Radius.card, style: .continuous).stroke(Theme.rule, lineWidth: Theme.hairline))
 
-                // 直近の卓
+                // 直近のゲーム
                 if !recent.isEmpty {
                     VStack(alignment: .leading, spacing: Space.md) {
-                        SectionLabel(text: "直近の卓")
+                        SectionLabel(text: "直近のゲーム")
                         VStack(spacing: Space.md) {
                             ForEach(recent) { session in
                                 Button { path.append(session) } label: {
                                     recentRow(session)
                                 }
                                 .buttonStyle(.plain)
+                                .contextMenu {
+                                    Button(role: .destructive) { toDelete = session } label: {
+                                        Label("削除", systemImage: "trash")
+                                    }
+                                }
                             }
                         }
                     }
@@ -73,6 +81,15 @@ struct HomeView: View {
                 showSetup = false
                 path.append(session)
             }
+        }
+        .confirmationDialog("このゲームを削除しますか？", isPresented: Binding(
+            get: { toDelete != nil }, set: { if !$0 { toDelete = nil } }
+        ), titleVisibility: .visible) {
+            Button("削除する", role: .destructive) {
+                if let s = toDelete { context.delete(s); try? context.save() }
+                toDelete = nil
+            }
+            Button("キャンセル", role: .cancel) { toDelete = nil }
         }
     }
 

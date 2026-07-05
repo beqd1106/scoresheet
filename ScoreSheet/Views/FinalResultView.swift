@@ -15,13 +15,7 @@ struct FinalResultView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: Space.xl) {
 
-                // 並び替え
-                Picker("並び替え", selection: $vm.sortKey) {
-                    ForEach(FinalResultViewModel.SortKey.allCases) { Text($0.rawValue).tag($0) }
-                }
-                .pickerStyle(.segmented)
-
-                // ランキング
+                // ランキング（総合ポイント順）
                 VStack(alignment: .leading, spacing: Space.md) {
                     SectionLabel(text: "最終ランキング", systemImage: "flag.checkered")
                     VStack(spacing: Space.md) {

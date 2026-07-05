@@ -8,6 +8,7 @@ final class TableSetupViewModel {
     var selectedPlayerIDs: [UUID] = []       // 並び順 = 席順の初期値
     var pointCoefficientPer1000: Double
     var chipPointCoefficient: Double
+    var tags: [String] = []
     var memo: String = ""
 
     init(defaultGameType: GameType = .yonma,
@@ -57,6 +58,7 @@ final class TableSetupViewModel {
                             participants: participants,
                             pointCoefficientPer1000: pointCoefficientPer1000,
                             chipPointCoefficient: chipPointCoefficient,
+                            tags: tags,
                             memo: memo)
     }
 }

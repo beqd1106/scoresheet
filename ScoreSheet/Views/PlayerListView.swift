@@ -15,7 +15,7 @@ struct PlayerListView: View {
 
                 // 追加
                 VStack(alignment: .leading, spacing: Space.sm) {
-                    SectionLabel(text: "メンバーを追加")
+                    SectionLabel(text: "プレイヤーを追加")
                     HStack(spacing: Space.sm) {
                         TextField("名前", text: $newName)
                             .textFieldStyle(.plain)
@@ -32,9 +32,9 @@ struct PlayerListView: View {
 
                 // 一覧
                 VStack(alignment: .leading, spacing: Space.md) {
-                    SectionLabel(text: "メンバー（\(players.count)人）")
+                    SectionLabel(text: "プレイヤー（\(players.count)人）")
                     if players.isEmpty {
-                        Text("まだメンバーがいません。").font(AppFont.body(14)).foregroundStyle(Theme.inkSecond)
+                        Text("まだプレイヤーがいません。").font(AppFont.body(14)).foregroundStyle(Theme.inkSecond)
                     }
                     VStack(spacing: 0) {
                         ForEach(Array(players.enumerated()), id: \.element.id) { idx, player in
@@ -49,10 +49,10 @@ struct PlayerListView: View {
             .padding(Space.lg)
         }
         .background(NotePageBackground())
-        .navigationTitle("メンバー")
+        .navigationTitle("プレイヤー")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $editingPlayer) { p in PlayerEditSheet(player: p) }
-        .confirmationDialog("このメンバーを削除しますか？（過去の記録は残ります）", isPresented: Binding(
+        .confirmationDialog("このプレイヤーを削除しますか？（過去の記録は残ります）", isPresented: Binding(
             get: { toDelete != nil }, set: { if !$0 { toDelete = nil } }
         ), titleVisibility: .visible) {
             Button("削除する", role: .destructive) {
@@ -120,7 +120,7 @@ struct PlayerEditSheet: View {
                 .padding(Space.lg)
             }
             .background(NotePageBackground())
-            .navigationTitle("メンバー編集")
+            .navigationTitle("プレイヤー編集")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
