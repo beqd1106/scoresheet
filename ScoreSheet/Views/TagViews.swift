@@ -45,9 +45,9 @@ struct FlowLayout: Layout {
     }
 }
 
-// MARK: - タグ編集シート（作成時・後付け共通）
+// MARK: - ゲーム設定シート（係数＋タグ。作成後の訂正用）
 
-struct TagEditSheet: View {
+struct GameSettingsSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var context
     @Bindable var session: TableSession
@@ -55,7 +55,6 @@ struct TagEditSheet: View {
 
     @State private var newTag = ""
 
-    /// 既存の全タグ（候補）。
     private var suggestions: [String] {
         let used = Set(session.tags)
         let all = Set(allSessions.flatMap { $0.tags })
@@ -66,8 +65,26 @@ struct TagEditSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: Space.xl) {
+
+                    // 係数
                     VStack(alignment: .leading, spacing: Space.md) {
-                        SectionLabel(text: "このゲームのタグ")
+                        SectionLabel(text: "ポイント係数")
+                        NoteCard {
+                            VStack(spacing: Space.lg) {
+                                coeffRow("チップ 1枚あたり", $session.chipPointCoefficient,
+                                         AppDefaults.chipStep, AppDefaults.chipMax)
+                                HairlineRule()
+                                coeffRow("1000点あたり", $session.pointCoefficientPer1000,
+                                         AppDefaults.per1000Step, AppDefaults.per1000Max)
+                            }
+                        }
+                        Text("総合計 = 対局ポイント×1000点係数 ＋ チップ枚数×チップ係数")
+                            .font(AppFont.body(12)).foregroundStyle(Theme.inkFaint)
+                    }
+
+                    // タグ
+                    VStack(alignment: .leading, spacing: Space.md) {
+                        SectionLabel(text: "タグ")
                         if session.tags.isEmpty {
                             Text("タグはまだありません。").font(AppFont.body(14)).foregroundStyle(Theme.inkSecond)
                         } else {
@@ -89,11 +106,7 @@ struct TagEditSheet: View {
                             }
                             .disabled(newTag.trimmingCharacters(in: .whitespaces).isEmpty)
                         }
-                    }
-
-                    if !suggestions.isEmpty {
-                        VStack(alignment: .leading, spacing: Space.md) {
-                            SectionLabel(text: "使ったことのあるタグ")
+                        if !suggestions.isEmpty {
                             FlowLayout {
                                 ForEach(suggestions, id: \.self) { t in
                                     Button { add(t) } label: { TagChip(text: t) }
@@ -105,13 +118,24 @@ struct TagEditSheet: View {
                 .padding(Space.lg)
             }
             .background(NotePageBackground())
-            .navigationTitle("タグ")
+            .navigationTitle("ゲーム設定")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("完了") { try? context.save(); dismiss() }
+                    Button("完了") { session.updatedAt = Date(); try? context.save(); dismiss() }
                 }
             }
+        }
+    }
+
+    private func coeffRow(_ title: String, _ value: Binding<Double>, _ step: Double, _ maxV: Double) -> some View {
+        HStack {
+            Text(title).font(AppFont.body(15)).foregroundStyle(Theme.ink)
+            Spacer()
+            Stepper("", value: value, in: 0...maxV, step: step).labelsHidden()
+            Text("\(Int(value.wrappedValue)) pt")
+                .font(AppFont.number(16, weight: .semibold)).foregroundStyle(Theme.accent)
+                .frame(width: 72, alignment: .trailing)
         }
     }
 

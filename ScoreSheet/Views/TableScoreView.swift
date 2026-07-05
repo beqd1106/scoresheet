@@ -13,7 +13,7 @@ struct TableScoreView: View {
     @State private var rows: [[String]] = []
     @State private var chipText: [String] = []
     @State private var loaded = false
-    @State private var showTags = false
+    @State private var showSettings = false
 
     private var participants: [Participant] { session.participants }
     private var n: Int { participants.count }
@@ -29,8 +29,9 @@ struct TableScoreView: View {
 
             ScrollView {
                 VStack(spacing: Space.lg) {
+                    gameHeader
                     scoreTable(colW: colW)
-                    Text("各回、全員の合計が 0 になるように入力してください。")
+                    Text("各回、全員の合計が 0 になるように入力してください。1人だけ空欄でEnterを押すと自動計算します。")
                         .font(AppFont.body(12))
                         .foregroundStyle(Theme.inkFaint)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -48,7 +49,7 @@ struct TableScoreView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button { showTags = true } label: { Image(systemName: "tag") }
+                Button { showSettings = true } label: { Image(systemName: "gearshape") }
             }
             ToolbarItem(placement: .topBarTrailing) {
                 NavigationLink { FinalResultView(session: session) } label: {
@@ -56,10 +57,42 @@ struct TableScoreView: View {
                 }
             }
         }
-        .sheet(isPresented: $showTags) { TagEditSheet(session: session) }
+        .sheet(isPresented: $showSettings) { GameSettingsSheet(session: session) }
         .onAppear(perform: loadIfNeeded)
         .onChange(of: rows) { _, _ in if loaded { persist() } }
         .onChange(of: chipText) { _, _ in if loaded { persist() } }
+    }
+
+    // MARK: ゲームヘッダー（係数＋タグを常時表示・タップで編集）
+
+    private var gameHeader: some View {
+        Button { showSettings = true } label: {
+            NoteCard(padding: Space.md) {
+                VStack(alignment: .leading, spacing: Space.sm) {
+                    HStack(spacing: Space.md) {
+                        coeffPill("1000点", Int(session.pointCoefficientPer1000))
+                        coeffPill("チップ1枚", Int(session.chipPointCoefficient))
+                        Spacer()
+                        Image(systemName: "gearshape").font(.system(size: 14)).foregroundStyle(Theme.inkFaint)
+                    }
+                    if !session.tags.isEmpty {
+                        FlowLayout(spacing: Space.xs) {
+                            ForEach(session.tags, id: \.self) { TagChip(text: $0) }
+                        }
+                    }
+                }
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func coeffPill(_ title: String, _ pt: Int) -> some View {
+        HStack(spacing: 4) {
+            Text(title).font(AppFont.body(11)).foregroundStyle(Theme.inkSecond)
+            Text("\(pt)pt").font(AppFont.number(13, weight: .bold)).foregroundStyle(Theme.accent)
+        }
+        .padding(.horizontal, Space.sm).padding(.vertical, 4)
+        .background(RoundedRectangle(cornerRadius: Radius.small).fill(Theme.sunken))
     }
 
     // MARK: スコア表（ヘッダー＋回戦行＋追加）
@@ -162,6 +195,8 @@ struct TableScoreView: View {
                             .multilineTextAlignment(.center)
                             .font(AppFont.number(15, weight: .semibold))
                             .foregroundStyle(Theme.pointColor(chipCount(idx)))
+                            .submitLabel(.done)
+                            .onSubmit { autoBalanceChips() }
                     }
                 }
             }
@@ -284,6 +319,16 @@ struct TableScoreView: View {
         guard emptyIdx.count == 1 else { return }
         let sumOthers = rows[r].reduce(0) { $0 + (Int($1) ?? 0) }
         rows[r][emptyIdx[0]] = "\(-sumOthers)"
+    }
+
+    /// チップ欄が1つだけ空欄なら、合計が0になるよう自動補完。
+    private func autoBalanceChips() {
+        let emptyIdx = chipText.indices.filter {
+            chipText[$0].trimmingCharacters(in: .whitespaces).isEmpty
+        }
+        guard emptyIdx.count == 1 else { return }
+        let sumOthers = chipText.reduce(0) { $0 + (Int($1) ?? 0) }
+        chipText[emptyIdx[0]] = "\(-sumOthers)"
     }
 
     private func deleteRound(_ r: Int) {
