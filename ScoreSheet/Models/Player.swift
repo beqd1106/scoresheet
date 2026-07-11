@@ -4,11 +4,12 @@ import SwiftData
 /// 名簿上のプレイヤー（メンバー管理）。
 @Model
 final class Player {
-    var id: UUID
-    var name: String
-    var colorHex: String
-    var iconName: String
-    var createdAt: Date
+    // CloudKit 同期のため全プロパティにデフォルト値を持たせる（制約）。
+    var id: UUID = UUID()
+    var name: String = ""
+    var colorHex: String = Theme.playerPalette[0]
+    var iconName: String = "person.fill"
+    var createdAt: Date = Date()
 
     init(name: String,
          colorHex: String = Theme.playerPalette[0],

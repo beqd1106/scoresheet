@@ -28,13 +28,20 @@ struct TableScoreView: View {
             let colW = max(52, (usable - labelW) / CGFloat(max(n, 1)))
 
             ScrollView {
-                VStack(spacing: Space.lg) {
+                // プレイヤー名ヘッダーは pinnedViews で常に上部固定。
+                LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
                     gameHeader
-                    scoreTable(colW: colW)
-                    Text("各回、全員の合計が 0 になるように入力してください。1人だけ空欄でEnterを押すと自動計算します。")
-                        .font(AppFont.body(12))
-                        .foregroundStyle(Theme.inkFaint)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.bottom, Space.lg)
+                    Section {
+                        tableBody(colW: colW)
+                        Text("各回、全員の合計が 0 になるように入力してください。1人だけ空欄でEnterを押すと自動計算します。")
+                            .font(AppFont.body(12))
+                            .foregroundStyle(Theme.inkFaint)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.top, Space.lg)
+                    } header: {
+                        tableHeader(colW: colW)
+                    }
                 }
                 .padding(.horizontal, hPad)
                 .padding(.top, Space.md)
@@ -97,33 +104,38 @@ struct TableScoreView: View {
 
     // MARK: スコア表（ヘッダー＋回戦行＋追加）
 
-    private func scoreTable(colW: CGFloat) -> some View {
-        VStack(spacing: 0) {
-            // ヘッダー：空 + プレイヤー名
-            HStack(spacing: 0) {
-                gridCell(width: labelW, showRight: true) { Color.clear }
-                ForEach(Array(participants.enumerated()), id: \.element.id) { idx, p in
-                    gridCell(width: colW, showRight: idx < n - 1) {
-                        VStack(spacing: 2) {
-                            PlayerDot(colorHex: p.colorHex, size: 7)
-                            Text(p.name)
-                                .font(AppFont.body(12, weight: .semibold))
-                                .foregroundStyle(Theme.ink)
-                                .lineLimit(1).minimumScaleFactor(0.7)
-                        }
+    /// スクロールしても上部に固定されるプレイヤー名ヘッダー。
+    private func tableHeader(colW: CGFloat) -> some View {
+        HStack(spacing: 0) {
+            gridCell(width: labelW, showRight: true) { Color.clear }
+            ForEach(Array(participants.enumerated()), id: \.element.id) { idx, p in
+                gridCell(width: colW, showRight: idx < n - 1) {
+                    VStack(spacing: 2) {
+                        PlayerDot(colorHex: p.colorHex, size: 7)
+                        Text(p.name)
+                            .font(AppFont.body(12, weight: .semibold))
+                            .foregroundStyle(Theme.ink)
+                            .lineLimit(1).minimumScaleFactor(0.7)
                     }
                 }
             }
-            .background(Theme.sunken)
-            gridLine()
+        }
+        .background(Theme.sunken)   // 不透明。スクロール時に下の行が透けない。
+        .clipShape(UnevenRoundedRectangle(topLeadingRadius: Radius.small, topTrailingRadius: Radius.small))
+        .overlay(
+            UnevenRoundedRectangle(topLeadingRadius: Radius.small, topTrailingRadius: Radius.small)
+                .stroke(Theme.rule, lineWidth: Theme.hairline)
+        )
+    }
 
-            // 回戦行
+    /// 回戦行＋追加ボタン。名前ヘッダーの下に続く本体。
+    private func tableBody(colW: CGFloat) -> some View {
+        VStack(spacing: 0) {
             ForEach(rows.indices, id: \.self) { r in
                 roundRow(r, colW: colW)
                 gridLine()
             }
 
-            // 追加ボタン
             Button { addRound() } label: {
                 HStack(spacing: Space.sm) {
                     Image(systemName: "plus.circle")
@@ -136,24 +148,36 @@ struct TableScoreView: View {
             }
         }
         .background(Theme.card)
-        .overlay(RoundedRectangle(cornerRadius: Radius.small).stroke(Theme.rule, lineWidth: Theme.hairline))
-        .clipShape(RoundedRectangle(cornerRadius: Radius.small))
+        .clipShape(UnevenRoundedRectangle(bottomLeadingRadius: Radius.small, bottomTrailingRadius: Radius.small))
+        .overlay(
+            UnevenRoundedRectangle(bottomLeadingRadius: Radius.small, bottomTrailingRadius: Radius.small)
+                .stroke(Theme.rule, lineWidth: Theme.hairline)
+        )
     }
 
     private func roundRow(_ r: Int, colW: CGFloat) -> some View {
-        let balanced = roundSum(r) == 0
+        let sum = roundSum(r)
+        let warn = rowWarnColor(r)   // nil＝OK、黄＝入力途中、赤＝全入力済みで不一致
         return HStack(spacing: 0) {
-            // 回戦ラベル（タップで削除メニュー）。不balanceなら赤。
+            // 回戦ラベル（タップで削除メニュー）。不一致ならズレ量を色付き表示。
             gridCell(width: labelW, showRight: true) {
                 Menu {
                     Button(role: .destructive) { deleteRound(r) } label: {
                         Label("この回戦を削除", systemImage: "trash")
                     }
                 } label: {
-                    Text("\(r + 1)回戦")
-                        .font(AppFont.body(12, weight: .semibold))
-                        .foregroundStyle(balanced ? Theme.inkSecond : Theme.negative)
-                        .lineLimit(1).minimumScaleFactor(0.7)
+                    VStack(spacing: 1) {
+                        Text("\(r + 1)回戦")
+                            .font(AppFont.body(12, weight: .semibold))
+                            .foregroundStyle(warn ?? Theme.inkSecond)
+                            .lineLimit(1).minimumScaleFactor(0.7)
+                        if let warn { // ズレ量（0にすべき差）
+                            Text(sum.signedPointString)
+                                .font(AppFont.number(10, weight: .bold))
+                                .foregroundStyle(warn)
+                                .lineLimit(1).minimumScaleFactor(0.6)
+                        }
+                    }
                 }
             }
             ForEach(Array(participants.enumerated()), id: \.element.id) { idx, _ in
@@ -169,6 +193,19 @@ struct TableScoreView: View {
                 }
             }
         }
+        .background((warn ?? .clear).opacity(warn == nil ? 0 : 0.10))
+    }
+
+    /// 回戦行の警告色。空欄なし＆合計≠0→赤、一部入力＆合計≠0→黄、それ以外→nil。
+    private func rowWarnColor(_ r: Int) -> Color? {
+        let filled = rowFilledCount(r)
+        guard filled > 0, roundSum(r) != 0 else { return nil }
+        return filled == n ? Theme.accentRed : Theme.accentYellow
+    }
+
+    private func rowFilledCount(_ r: Int) -> Int {
+        guard r < rows.count else { return 0 }
+        return rows[r].filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }.count
     }
 
     // MARK: 下部固定フッター（合計・チップ・総合計）

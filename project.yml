@@ -22,6 +22,18 @@ targets:
     platform: iOS
     sources:
       - path: ScoreSheet
+    # iCloud(CloudKit) 同期用の entitlements を生成。
+    entitlements:
+      path: ScoreSheet/ScoreSheet.entitlements
+      properties:
+        com.apple.developer.icloud-container-identifiers:
+          - iCloud.com.beqd1106.scoresheet
+        com.apple.developer.icloud-services:
+          - CloudKit
+        # TestFlight/配布ビルドでも CloudKit の Development 環境を使う。
+        # → Mac なしでも初回起動時にスキーマが自動生成され、Production への手動反映が不要。
+        # ※ 一般公開(App Store)時は Production に切替＋スキーマを本番Deployすること。
+        com.apple.developer.icloud-container-environment: Development
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.beqd1106.scoresheet

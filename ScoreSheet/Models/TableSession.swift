@@ -4,23 +4,25 @@ import SwiftData
 /// 1つの卓（対局セッション）。回戦・チップ・設定・参加者をまとめて保持。
 @Model
 final class TableSession {
-    var id: UUID
-    var date: Date
-    var gameTypeRaw: String
-    var participants: [Participant]
-    var chips: [ChipEntry]
+    // CloudKit 同期のため全プロパティにデフォルト値を持たせる（制約）。
+    var id: UUID = UUID()
+    var date: Date = Date()
+    var gameTypeRaw: String = GameType.yonma.rawValue
+    var participants: [Participant] = []
+    var chips: [ChipEntry] = []
 
     // 設定（TableSettings 相当をインラインで保持）
-    var pointCoefficientPer1000: Double  // 1000点あたり何ポイントか
-    var chipPointCoefficient: Double     // チップ1枚あたりのポイント係数
+    var pointCoefficientPer1000: Double = AppDefaults.pointCoefficientPer1000  // 1000点あたり何ポイントか
+    var chipPointCoefficient: Double = AppDefaults.chipPointCoefficient        // チップ1枚あたりのポイント係数
     var tags: [String] = []              // 集計グルーピング用タグ
-    var memo: String
+    var memo: String = ""
 
-    var createdAt: Date
-    var updatedAt: Date
+    var createdAt: Date = Date()
+    var updatedAt: Date = Date()
 
+    // CloudKit では to-many リレーションは任意（空配列デフォルト）が必須。
     @Relationship(deleteRule: .cascade)
-    var rounds: [RoundResult]
+    var rounds: [RoundResult] = []
 
     init(gameType: GameType,
          participants: [Participant],

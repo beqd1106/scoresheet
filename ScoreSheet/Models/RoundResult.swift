@@ -4,11 +4,12 @@ import SwiftData
 /// 1回戦の結果。points に全プレイヤー分（トップ含む）を格納。
 @Model
 final class RoundResult {
-    var id: UUID
-    var roundNumber: Int
-    var points: [PlayerRoundPoint]
-    var memo: String
-    var createdAt: Date
+    // CloudKit 同期のため全プロパティにデフォルト値を持たせる（制約）。
+    var id: UUID = UUID()
+    var roundNumber: Int = 0
+    var points: [PlayerRoundPoint] = []
+    var memo: String = ""
+    var createdAt: Date = Date()
 
     @Relationship(inverse: \TableSession.rounds)
     var session: TableSession?
