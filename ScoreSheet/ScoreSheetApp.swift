@@ -3,30 +3,18 @@ import SwiftData
 
 @main
 struct ScoreSheetApp: App {
-    // SwiftData + CloudKit（iCloud 自動同期）。
-    // 端末を消しても、同じ Apple ID で再インストールすれば iCloud から自動復元される。
-    // cloudKitDatabase: .automatic は entitlements の iCloud コンテナを使用。
-    // ※ CloudKit の初期化に失敗した場合はローカルのみにフォールバックし、
-    //   少なくともデータが失われない・アプリが起動しないことを防ぐ。
+    // ローカル保存（SwiftData・端末内完結）。v1 は端末内保存のみ。
+    // ※ iCloud 同期は将来対応（実機での動作検証が取れ次第 v1.1 で追加予定）。
+    //   モデルは CloudKit 対応時の制約（全プロパティ既定値・to-many 空配列既定）を維持している。
     let container: ModelContainer
 
     init() {
-        let schema = Schema([Player.self, TableSession.self, RoundResult.self])
         do {
-            let config = ModelConfiguration(schema: schema,
-                                            isStoredInMemoryOnly: false,
-                                            cloudKitDatabase: .automatic)
+            let schema = Schema([Player.self, TableSession.self, RoundResult.self])
+            let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
             container = try ModelContainer(for: schema, configurations: [config])
         } catch {
-            // iCloud が使えない環境（未ログイン等）でも起動できるようローカルへフォールバック。
-            do {
-                let local = ModelConfiguration(schema: schema,
-                                               isStoredInMemoryOnly: false,
-                                               cloudKitDatabase: .none)
-                container = try ModelContainer(for: schema, configurations: [local])
-            } catch {
-                fatalError("ModelContainer の初期化に失敗: \(error)")
-            }
+            fatalError("ModelContainer の初期化に失敗: \(error)")
         }
     }
 
