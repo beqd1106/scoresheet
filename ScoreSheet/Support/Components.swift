@@ -62,7 +62,11 @@ struct NoteCard<Content: View>: View {
     @ViewBuilder var content: Content
 
     var body: some View {
-        content
+        // VStack で包まないと、複数ビューを渡したとき TupleView が親のレイアウトに
+        // 展開され、子ごとに別々のカードになってしまう。
+        VStack(alignment: .leading, spacing: 0) {
+            content
+        }
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
