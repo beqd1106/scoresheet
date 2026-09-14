@@ -64,7 +64,7 @@ struct TableScoreView: View {
                             .foregroundStyle(Theme.inkFaint)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.top, Space.lg)
-                        busterPrompt
+                        roundExtras
                             .padding(.top, Space.lg)
                     } header: {
                         tableHeader(colW: colW)
@@ -644,45 +644,109 @@ struct TableScoreView: View {
         return out
     }
 
-    /// 表の下に出す指定カード。名前をタップするだけで決められるようにする。
+    /// 表の下に出す回戦ごとの設定カード。
+    /// 点棒を入力 → ヤキトリを1タップでON/OFF → トビがいれば飛ばした人を選ぶ、という流れ。
     @ViewBuilder
-    private var busterPrompt: some View {
-        let pending = pendingBusters
-        if !pending.isEmpty {
+    private var roundExtras: some View {
+        let targets = extraRounds
+        if !targets.isEmpty {
             VStack(alignment: .leading, spacing: Space.md) {
-                SectionLabel(text: "飛ばした人を指定", systemImage: "exclamationmark.triangle")
-                ForEach(pending.indices, id: \.self) { i in
-                    let r = pending[i].round
-                    let c = pending[i].player
+                SectionLabel(text: "回戦ごとの設定", systemImage: "hand.tap")
+                ForEach(targets, id: \.self) { r in
                     NoteCard(padding: Space.md) {
-                        VStack(alignment: .leading, spacing: Space.sm) {
-                            Text("\(r + 1)回戦　\(participants[c].name) を飛ばしたのは？")
-                                .font(AppFont.body(14, weight: .semibold))
-                                .foregroundStyle(Theme.ink)
-                            FlowLayout(spacing: Space.sm) {
-                                ForEach(Array(participants.enumerated()), id: \.element.id) { idx, p in
-                                    if idx != c {
-                                        Button { setBuster(r, c, p.id) } label: { playerChip(p) }
+                        VStack(alignment: .leading, spacing: Space.md) {
+                            HStack(spacing: Space.sm) {
+                                Text("\(r + 1)回戦")
+                                    .font(AppFont.body(14, weight: .bold)).foregroundStyle(Theme.ink)
+                                if !pendingBusterIndices(r).isEmpty {
+                                    Text("未指定")
+                                        .font(AppFont.body(11, weight: .semibold))
+                                        .foregroundStyle(Theme.accentYellow)
+                                }
+                            }
+
+                            if rule.yakitoriEnabled {
+                                VStack(alignment: .leading, spacing: Space.sm) {
+                                    Text("ヤキトリ（タップで切り替え）")
+                                        .font(AppFont.body(12)).foregroundStyle(Theme.inkSecond)
+                                    FlowLayout(spacing: Space.sm) {
+                                        ForEach(Array(participants.enumerated()), id: \.element.id) { idx, p in
+                                            Button { toggleYakitori(r, idx) } label: {
+                                                nameChip(p, selected: isYakitori(r, idx), tint: Theme.accentYellow)
+                                            }
                                             .buttonStyle(.plain)
+                                        }
+                                    }
+                                }
+                            }
+
+                            if rule.tobiEnabled && rule.tobiPayee == .buster {
+                                ForEach(tobiIndices(r), id: \.self) { c in
+                                    VStack(alignment: .leading, spacing: Space.sm) {
+                                        if c > 0 || rule.yakitoriEnabled { HairlineRule() }
+                                        Text("\(participants[c].name) を飛ばしたのは？")
+                                            .font(AppFont.body(12)).foregroundStyle(Theme.inkSecond)
+                                        FlowLayout(spacing: Space.sm) {
+                                            ForEach(Array(participants.enumerated()), id: \.element.id) { idx, p in
+                                                if idx != c {
+                                                    Button {
+                                                        // もう一度押したら解除。
+                                                        setBuster(r, c, busterAt(r, c) == p.id ? nil : p.id)
+                                                    } label: {
+                                                        nameChip(p, selected: busterAt(r, c) == p.id, tint: Theme.accent)
+                                                    }
+                                                    .buttonStyle(.plain)
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }
                         }
                     }
                 }
-                Text("指定するまではトップが受け取る扱いで計算します。")
-                    .font(AppFont.body(12)).foregroundStyle(Theme.inkFaint)
+                if !pendingBusters.isEmpty {
+                    Text("飛ばした人を指定するまでは、トップが受け取る扱いで計算します。")
+                        .font(AppFont.body(12)).foregroundStyle(Theme.inkFaint)
+                }
             }
         }
     }
 
-    private func playerChip(_ p: Participant) -> some View {
-        HStack(spacing: Space.xs) {
-            PlayerDot(colorHex: p.colorHex, size: 8)
-            Text(p.name).font(AppFont.body(14, weight: .medium)).foregroundStyle(Theme.accent)
+    /// 設定カードを出す回戦（何か入力がある回戦だけ）。
+    private var extraRounds: [Int] {
+        guard isRaw else { return [] }
+        let needsYakitori = rule.yakitoriEnabled
+        let needsBuster = rule.tobiEnabled && rule.tobiPayee == .buster
+        guard needsYakitori || needsBuster else { return [] }
+        return rows.indices.filter { r in
+            if rowFilledCount(r) == 0 { return false }
+            return needsYakitori || !tobiIndices(r).isEmpty
         }
+    }
+
+    /// 指定待ちのトビ（回戦単位）。
+    private func pendingBusterIndices(_ r: Int) -> [Int] {
+        guard rule.tobiEnabled, rule.tobiPayee == .buster else { return [] }
+        return tobiIndices(r).filter { busterAt(r, $0) == nil }
+    }
+
+    /// 名前チップ。選択中は塗りつぶす。
+    private func nameChip(_ p: Participant, selected: Bool, tint: Color) -> some View {
+        HStack(spacing: Space.xs) {
+            if selected {
+                Image(systemName: "checkmark").font(.system(size: 10, weight: .bold))
+            } else {
+                PlayerDot(colorHex: p.colorHex, size: 8)
+            }
+            Text(p.name).font(AppFont.body(14, weight: .medium))
+        }
+        .foregroundStyle(selected ? Color.white : Theme.inkSecond)
         .padding(.horizontal, Space.md).padding(.vertical, Space.sm)
-        .background(RoundedRectangle(cornerRadius: Radius.pill).fill(Theme.accent.opacity(0.10)))
+        .frame(minHeight: 36)
+        .background(RoundedRectangle(cornerRadius: Radius.pill).fill(selected ? tint : Theme.sunken))
+        .overlay(RoundedRectangle(cornerRadius: Radius.pill)
+            .stroke(selected ? Color.clear : Theme.rule, lineWidth: Theme.hairline))
     }
 
     // MARK: 行操作
