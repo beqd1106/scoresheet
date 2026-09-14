@@ -21,6 +21,21 @@ jobs:
       - name: Generate Xcode project
         run: xcodegen generate
 
+      # ランナーのイメージによって用意されている機種が変わるため、
+      # 名前を決め打ちにせず「利用可能な iPhone シミュレータ」を拾う。
+      - name: Pick an available iPhone simulator
+        id: sim
+        run: |
+          name=$(xcrun simctl list devices available -j \
+            | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; ns=sorted(x['name'] for rt,v in d.items() if 'iOS' in rt for x in v if x['name'].startswith('iPhone')); print(ns[-1] if ns else '')")
+          if [ -z "$name" ]; then
+            echo "利用可能な iPhone シミュレータが見つかりません"
+            xcrun simctl list devices available
+            exit 1
+          fi
+          echo "使用するシミュレータ: $name"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+
       - name: Build & Test (iOS Simulator, no signing)
         run: |
           set -o pipefail
@@ -28,6 +43,6 @@ jobs:
             -project ScoreSheet.xcodeproj \
             -scheme ScoreSheet \
             -configuration Debug \
-            -destination 'platform=iOS Simulator,name=iPhone 16' \
+            -destination "platform=iOS Simulator,OS=latest,name=${{ steps.sim.outputs.name }}" \
             CODE_SIGNING_ALLOWED=NO \
             test
