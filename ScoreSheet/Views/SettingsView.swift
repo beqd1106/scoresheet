@@ -6,6 +6,7 @@ struct SettingsView: View {
     @AppStorage(AppSettingsKey.chipPointCoefficient) private var chipCoeff = AppDefaults.chipPointCoefficient
     @AppStorage(AppSettingsKey.quickPoints) private var quickPointsRaw = "50,100,150,200,300"
     @AppStorage(AppSettingsKey.appearance) private var appearanceRaw = Appearance.system.rawValue
+    @AppStorage(AppSettingsKey.defaultInputMode) private var defaultInputModeRaw = InputMode.point.rawValue
 
     private var defaultGameType: Binding<GameType> {
         Binding(get: { GameType(rawValue: defaultGameTypeRaw) ?? .yonma },
@@ -23,6 +24,17 @@ struct SettingsView: View {
                         ForEach(GameType.allCases) { Text($0.displayName).tag($0) }
                     }
                     .pickerStyle(.segmented)
+                }
+
+                // デフォルト入力方式
+                VStack(alignment: .leading, spacing: Space.md) {
+                    SectionLabel(text: "デフォルトの入力方式")
+                    Picker("入力方式", selection: $defaultInputModeRaw) {
+                        ForEach(InputMode.allCases) { Text($0.displayName).tag($0.rawValue) }
+                    }
+                    .pickerStyle(.segmented)
+                    Text((InputMode(rawValue: defaultInputModeRaw) ?? .point).summary)
+                        .font(AppFont.body(12)).foregroundStyle(Theme.inkFaint)
                 }
 
                 // 係数

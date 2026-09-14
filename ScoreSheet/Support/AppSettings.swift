@@ -7,6 +7,7 @@ enum AppSettingsKey {
     static let chipPointCoefficient = "settings.chipPointCoefficient"
     static let quickPoints = "settings.quickPoints"        // カンマ区切り "5,10,15,20,30"
     static let appearance = "settings.appearance"
+    static let defaultInputMode = "settings.defaultInputMode"
 }
 
 enum Appearance: String, CaseIterable, Identifiable {

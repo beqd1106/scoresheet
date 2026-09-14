@@ -32,6 +32,109 @@ enum ScoreCalculator {
         Int((Double(scoreDiffFromOrigin) / 1000.0 * per1000).rounded())
     }
 
+    // MARK: - 素点から自動計算
+
+    /// 素点（終局時の持ち点）からその回戦のポイントを算出する。
+    /// 返り値は入力と同じ並び順。合計は必ず 0（オカ・端数はトップで調整）。
+    ///
+    /// 計算順：
+    ///   1) 順位を決める（点数の高い順・同点は席順が上の人が上位）
+    ///   2) (持ち点 − 返し点) ÷ 1000 を端数処理
+    ///   3) 順位点（ウマ）を加算
+    ///   4) トビ・ヤキトリ・クビの罰符を授受
+    ///   5) 合計が 0 になるよう残り（＝オカ＋端数）をトップに寄せる
+    static func settle(participantIDs: [UUID],
+                       rawScores: [Int],
+                       yakitoriFlags: [Bool],
+                       rule: GameRule) -> [RoundSettlement] {
+        let n = participantIDs.count
+        guard n > 0, rawScores.count == n else { return [] }
+        let yakitori = yakitoriFlags.count == n ? yakitoriFlags : Array(repeating: false, count: n)
+
+        // 1) 順位（同点は席順＝配列の前にいる人を上位とする）
+        let order = (0..<n).sorted { a, b in
+            rawScores[a] == rawScores[b] ? a < b : rawScores[a] > rawScores[b]
+        }
+        var rankOf = Array(repeating: 0, count: n)
+        for (pos, idx) in order.enumerated() { rankOf[idx] = pos + 1 }
+        let topIndex = order[0]
+
+        // 2) 素点差
+        let base = (0..<n).map { i in
+            rule.rounding.apply(Double(rawScores[i] - rule.returnPoints) / 1000.0)
+        }
+
+        // 3) ウマ
+        let uma = rule.normalizedUma(playerCount: n)
+        let umaPt = (0..<n).map { uma[rankOf[$0] - 1] }
+
+        // 4) 罰符
+        var penalty = Array(repeating: 0, count: n)
+        let isTobi = (0..<n).map { i in
+            guard rule.tobiEnabled else { return false }
+            return rawScores[i] < 0 || (rule.tobiIncludesZero && rawScores[i] == 0)
+        }
+        applyPenalty(&penalty, payers: (0..<n).filter { isTobi[$0] },
+                     amount: rule.tobiPenalty, payee: rule.tobiPayee, topIndex: topIndex, count: n)
+
+        let isYakitori = (0..<n).map { rule.yakitoriEnabled && yakitori[$0] }
+        applyPenalty(&penalty, payers: (0..<n).filter { isYakitori[$0] },
+                     amount: rule.yakitoriPenalty, payee: rule.yakitoriPayee, topIndex: topIndex, count: n)
+
+        if rule.kubiEnabled {
+            applyPenalty(&penalty, payers: (0..<n).filter { rankOf[$0] == n },
+                         amount: rule.kubiPenalty, payee: rule.kubiPayee, topIndex: topIndex, count: n)
+        }
+
+        // 5) オカ＋端数をトップへ
+        let subtotal = (0..<n).map { base[$0] + umaPt[$0] + penalty[$0] }
+        let residue = -subtotal.reduce(0, +)
+
+        return (0..<n).map { i in
+            RoundSettlement(participantID: participantIDs[i],
+                            rank: rankOf[i],
+                            basePoint: base[i],
+                            umaPoint: umaPt[i],
+                            penaltyPoint: penalty[i],
+                            okaPoint: i == topIndex ? residue : 0,
+                            isTobi: isTobi[i],
+                            isYakitori: isYakitori[i])
+        }
+    }
+
+    /// 罰符の授受を penalty 配列へ加算する。
+    /// 山分けで割り切れない分はここでは配らず、最後のトップ調整で吸収させる。
+    private static func applyPenalty(_ penalty: inout [Int],
+                                     payers: [Int],
+                                     amount: Int,
+                                     payee: PenaltyPayee,
+                                     topIndex: Int,
+                                     count: Int) {
+        guard !payers.isEmpty, amount != 0 else { return }
+        let pot = amount * payers.count
+        for i in payers { penalty[i] -= amount }
+
+        switch payee {
+        case .top:
+            penalty[topIndex] += pot
+        case .others:
+            let receivers = (0..<count).filter { !payers.contains($0) }
+            guard !receivers.isEmpty else { return }
+            let each = pot / receivers.count
+            for i in receivers { penalty[i] += each }
+        }
+    }
+
+    /// 素点入力が全員そろっているか。
+    static func isRawRoundComplete(_ scores: [Int?]) -> Bool {
+        !scores.isEmpty && scores.allSatisfy { $0 != nil }
+    }
+
+    /// 素点合計が想定どおりか（＝入力ミス検知）。
+    static func isRawRoundBalanced(_ scores: [Int], rule: GameRule, playerCount: Int) -> Bool {
+        scores.reduce(0, +) == rule.expectedTotalScore(playerCount: playerCount)
+    }
+
     // MARK: - 最終集計
 
     /// 対局ポイント（各回の入力合計）を 1000点係数で換算した pt。

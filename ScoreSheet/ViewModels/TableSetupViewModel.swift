@@ -10,6 +10,8 @@ final class TableSetupViewModel {
     var chipPointCoefficient: Double
     var tags: [String] = []
     var memo: String = ""
+    var inputMode: InputMode = .point
+    var rule: GameRule = GameRule.standard(for: .yonma)
 
     init(defaultGameType: GameType = .yonma,
          pointCoefficientPer1000: Double = AppDefaults.pointCoefficientPer1000,
@@ -36,6 +38,19 @@ final class TableSetupViewModel {
         if selectedPlayerIDs.count > requiredCount {
             selectedPlayerIDs = Array(selectedPlayerIDs.prefix(requiredCount))
         }
+        applyGameTypeToRule()
+    }
+
+    /// 種別変更にルールを追従させる。
+    /// 触っていない（＝もう一方の標準のままの）ときは丸ごと標準へ、
+    /// 手を入れている場合はウマの人数だけ合わせて設定を残す。
+    private func applyGameTypeToRule() {
+        let other: GameType = gameType == .sanma ? .yonma : .sanma
+        if rule == GameRule.standard(for: other) {
+            rule = GameRule.standard(for: gameType)
+        } else {
+            rule.normalize(for: gameType)
+        }
     }
 
     var canStart: Bool { selectedPlayerIDs.count == requiredCount }
@@ -59,6 +74,8 @@ final class TableSetupViewModel {
                             pointCoefficientPer1000: pointCoefficientPer1000,
                             chipPointCoefficient: chipPointCoefficient,
                             tags: tags,
-                            memo: memo)
+                            memo: memo,
+                            inputMode: inputMode,
+                            rule: rule)
     }
 }

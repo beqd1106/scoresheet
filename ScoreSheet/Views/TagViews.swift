@@ -66,6 +66,44 @@ struct GameSettingsSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: Space.xl) {
 
+                    // 入力方式とルール
+                    VStack(alignment: .leading, spacing: Space.md) {
+                        SectionLabel(text: "入力方式")
+                        Picker("入力方式", selection: inputModeBinding) {
+                            ForEach(InputMode.allCases) { Text($0.displayName).tag($0) }
+                        }
+                        .pickerStyle(.segmented)
+                        .disabled(session.hasEnteredScores)
+
+                        if session.hasEnteredScores {
+                            Text("すでに点数が入力されているため変更できません。別の方式で記録したい場合は新しいゲームを作成してください。")
+                                .font(AppFont.body(12)).foregroundStyle(Theme.inkFaint)
+                        } else {
+                            Text(session.inputMode.summary)
+                                .font(AppFont.body(12)).foregroundStyle(Theme.inkFaint)
+                        }
+
+                        if session.inputMode == .rawScore {
+                            NavigationLink { ruleEditorPage } label: {
+                                NoteCard(padding: Space.md) {
+                                    HStack(spacing: Space.md) {
+                                        VStack(alignment: .leading, spacing: 3) {
+                                            Text("対局ルール")
+                                                .font(AppFont.body(14, weight: .semibold)).foregroundStyle(Theme.ink)
+                                            Text(ruleSummaryText)
+                                                .font(AppFont.body(12)).foregroundStyle(Theme.inkSecond)
+                                                .lineLimit(1).minimumScaleFactor(0.7)
+                                        }
+                                        Spacer()
+                                        Image(systemName: "chevron.right")
+                                            .font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.inkFaint)
+                                    }
+                                }
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+
                     // 係数
                     VStack(alignment: .leading, spacing: Space.md) {
                         SectionLabel(text: "ポイント係数")
@@ -126,6 +164,37 @@ struct GameSettingsSheet: View {
                 }
             }
         }
+    }
+
+    private var inputModeBinding: Binding<InputMode> {
+        Binding(get: { session.inputMode }, set: { session.inputMode = $0 })
+    }
+
+    private var ruleBinding: Binding<GameRule> {
+        Binding(get: { session.rule }, set: { session.rule = $0 })
+    }
+
+    private var ruleEditorPage: some View {
+        ScrollView {
+            RuleEditor(rule: ruleBinding, gameType: session.gameType)
+                .padding(Space.lg)
+        }
+        .background(NotePageBackground())
+        .navigationTitle("対局ルール")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var ruleSummaryText: String {
+        let rule = session.rule
+        let uma = rule.normalizedUma(playerCount: session.gameType.playerCount)
+        var text = "\(rule.startingPoints)持ち\(rule.returnPoints)返し・ウマ "
+            + uma.map { $0.signedPointString }.joined(separator: "/")
+        var penalties: [String] = []
+        if rule.tobiEnabled { penalties.append("トビ") }
+        if rule.yakitoriEnabled { penalties.append("ヤキトリ") }
+        if rule.kubiEnabled { penalties.append("クビ") }
+        if !penalties.isEmpty { text += "・" + penalties.joined(separator: "/") }
+        return text
     }
 
     private func coeffRow(_ title: String, _ value: Binding<Double>, _ step: Double, _ maxV: Double) -> some View {

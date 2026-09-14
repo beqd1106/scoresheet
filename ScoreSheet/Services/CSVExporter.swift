@@ -11,6 +11,15 @@ enum CSVExporter {
         lines.append("スコアシート エクスポート")
         lines.append("日付,\(df.string(from: session.date))")
         lines.append("種別,\(session.gameType.displayName)")
+        lines.append("入力方式,\(session.inputMode.displayName)")
+        if session.inputMode == .rawScore {
+            let rule = session.rule
+            let uma = rule.normalizedUma(playerCount: session.gameType.playerCount)
+            lines.append("配給原点,\(rule.startingPoints)")
+            lines.append("返し点,\(rule.returnPoints)")
+            lines.append("ウマ,\(uma.map(String.init).joined(separator: "/"))")
+            lines.append("端数処理,\(rule.rounding.displayName)")
+        }
         lines.append("チップ係数,1枚=\(fmt(session.chipPointCoefficient))ポイント")
         lines.append("")
 
@@ -27,6 +36,24 @@ enum CSVExporter {
             row += parts.map { "\(round.point(for: $0.id).signedPointString)" }
             row.append("\(round.pointSum)")
             lines.append(row.joined(separator: ","))
+        }
+
+        // 素点入力モードでは入力した持ち点もそのまま残す。
+        if session.inputMode == .rawScore {
+            lines.append("")
+            var rawHeader = ["回戦（素点）"]
+            rawHeader += parts.map { escape($0.name) }
+            lines.append(rawHeader.joined(separator: ","))
+            for round in session.sortedRounds {
+                var row = ["\(round.roundNumber)回戦"]
+                row += parts.map { p in
+                    if let raw = round.points.first(where: { $0.participantID == p.id })?.rawScore {
+                        return "\(raw)"
+                    }
+                    return ""
+                }
+                lines.append(row.joined(separator: ","))
+            }
         }
         lines.append("")
 

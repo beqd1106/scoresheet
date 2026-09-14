@@ -17,6 +17,12 @@ final class TableSession {
     var tags: [String] = []              // 集計グルーピング用タグ
     var memo: String = ""
 
+    // 入力方式とルール（v1.1 追加）。
+    // ルールは構造体のまま持つとスキーマ変更の影響が読みにくいため、
+    // JSON 文字列（プリミティブ）で保持して軽量マイグレーションを確実にする。
+    var inputModeRaw: String = InputMode.point.rawValue
+    var ruleJSON: String = ""
+
     var createdAt: Date = Date()
     var updatedAt: Date = Date()
 
@@ -29,7 +35,9 @@ final class TableSession {
          pointCoefficientPer1000: Double = AppDefaults.pointCoefficientPer1000,
          chipPointCoefficient: Double = AppDefaults.chipPointCoefficient,
          tags: [String] = [],
-         memo: String = "") {
+         memo: String = "",
+         inputMode: InputMode = .point,
+         rule: GameRule? = nil) {
         self.id = UUID()
         self.date = Date()
         self.gameTypeRaw = gameType.rawValue
@@ -42,11 +50,48 @@ final class TableSession {
         self.createdAt = Date()
         self.updatedAt = Date()
         self.rounds = []
+        self.inputModeRaw = inputMode.rawValue
+        self.ruleJSON = TableSession.encodeRule(rule ?? GameRule.standard(for: gameType))
     }
 
     var gameType: GameType {
         get { GameType(rawValue: gameTypeRaw) ?? .yonma }
         set { gameTypeRaw = newValue.rawValue }
+    }
+
+    var inputMode: InputMode {
+        get { InputMode(rawValue: inputModeRaw) ?? .point }
+        set { inputModeRaw = newValue.rawValue }
+    }
+
+    /// 対局ルール。未設定（旧データ）なら種別に応じた標準ルールを返す。
+    var rule: GameRule {
+        get {
+            guard let data = ruleJSON.data(using: .utf8),
+                  let decoded = try? JSONDecoder().decode(GameRule.self, from: data) else {
+                return GameRule.standard(for: gameType)
+            }
+            return decoded
+        }
+        set { ruleJSON = TableSession.encodeRule(newValue) }
+    }
+
+    static func encodeRule(_ rule: GameRule) -> String {
+        guard let data = try? JSONEncoder().encode(rule),
+              let text = String(data: data, encoding: .utf8) else { return "" }
+        return text
+    }
+
+    /// すでに点数が入力されているか（入力方式の切り替え可否の判定に使う）。
+    var hasEnteredScores: Bool {
+        rounds.contains { round in
+            round.points.contains { $0.rawScore != nil || $0.point != 0 }
+        }
+    }
+
+    /// 素点入力時に全員の持ち点合計が一致すべき値。
+    var expectedTotalScore: Int {
+        rule.expectedTotalScore(playerCount: gameType.playerCount)
     }
 
     /// 回戦番号順に並べた回戦一覧。

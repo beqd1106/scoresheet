@@ -9,6 +9,7 @@ struct TableSetupView: View {
     @AppStorage(AppSettingsKey.defaultGameType) private var defaultGameTypeRaw = GameType.yonma.rawValue
     @AppStorage(AppSettingsKey.pointCoefficientPer1000) private var defaultPer1000 = AppDefaults.pointCoefficientPer1000
     @AppStorage(AppSettingsKey.chipPointCoefficient) private var defaultChip = AppDefaults.chipPointCoefficient
+    @AppStorage(AppSettingsKey.defaultInputMode) private var defaultInputModeRaw = InputMode.point.rawValue
 
     @State private var vm = TableSetupViewModel()
     @State private var newPlayerName = ""
@@ -36,6 +37,21 @@ struct TableSetupView: View {
                         }
                         .pickerStyle(.segmented)
                         .onChange(of: vm.gameType) { _, _ in vm.normalizeSelection() }
+                    }
+
+                    // 入力方式
+                    VStack(alignment: .leading, spacing: Space.md) {
+                        SectionLabel(text: "入力方式")
+                        Picker("入力方式", selection: $vm.inputMode) {
+                            ForEach(InputMode.allCases) { Text($0.displayName).tag($0) }
+                        }
+                        .pickerStyle(.segmented)
+                        Text(vm.inputMode.summary)
+                            .font(AppFont.body(12)).foregroundStyle(Theme.inkFaint)
+                        if vm.inputMode == .rawScore {
+                            NavigationLink { ruleEditorPage } label: { ruleSummaryRow }
+                                .buttonStyle(.plain)
+                        }
                     }
 
                     // プレイヤー選択
@@ -138,6 +154,44 @@ struct TableSetupView: View {
                 vm.gameType = GameType(rawValue: defaultGameTypeRaw) ?? .yonma
                 vm.pointCoefficientPer1000 = defaultPer1000
                 vm.chipPointCoefficient = defaultChip
+                vm.inputMode = InputMode(rawValue: defaultInputModeRaw) ?? .point
+                vm.rule = GameRule.standard(for: vm.gameType)
+            }
+        }
+    }
+
+    private var ruleEditorPage: some View {
+        ScrollView {
+            RuleEditor(rule: $vm.rule, gameType: vm.gameType)
+                .padding(Space.lg)
+        }
+        .background(NotePageBackground())
+        .navigationTitle("対局ルール")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    /// 現在のルールの要約（タップで編集画面へ）。
+    private var ruleSummaryRow: some View {
+        let uma = vm.rule.normalizedUma(playerCount: vm.requiredCount)
+        var penalties: [String] = []
+        if vm.rule.tobiEnabled { penalties.append("トビ") }
+        if vm.rule.yakitoriEnabled { penalties.append("ヤキトリ") }
+        if vm.rule.kubiEnabled { penalties.append("クビ") }
+        return NoteCard(padding: Space.md) {
+            HStack(spacing: Space.md) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("\(vm.rule.startingPoints)点持ち / \(vm.rule.returnPoints)点返し")
+                        .font(AppFont.body(14, weight: .semibold)).foregroundStyle(Theme.ink)
+                    Text("ウマ \(uma.map { $0.signedPointString }.joined(separator: "/"))"
+                         + (penalties.isEmpty ? "" : "・罰符 " + penalties.joined(separator: "/")))
+                        .font(AppFont.body(12)).foregroundStyle(Theme.inkSecond)
+                        .lineLimit(1).minimumScaleFactor(0.7)
+                }
+                Spacer()
+                Text("変更")
+                    .font(AppFont.body(13, weight: .semibold)).foregroundStyle(Theme.accent)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.inkFaint)
             }
         }
     }

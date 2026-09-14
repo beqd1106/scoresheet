@@ -29,9 +29,19 @@ final class FinalResultViewModel {
 
     func chipCount(for id: UUID) -> Int { session.chipCount(for: id) }
 
-    /// コピー用テキスト（プレーン）。
+    /// コピー・共有用テキスト（プレーン）。
     var shareText: String {
-        var lines: [String] = ["【\(session.gameType.displayName) 結果】"]
+        let df = DateFormatter()
+        df.dateFormat = "yyyy/MM/dd"
+        var lines: [String] = [
+            "【\(session.gameType.displayName) 結果】\(df.string(from: session.date))　\(session.rounds.count)回戦"
+        ]
+        if session.inputMode == .rawScore {
+            let rule = session.rule
+            let uma = rule.normalizedUma(playerCount: session.gameType.playerCount)
+            let umaText = uma.map { $0.signedPointString }.joined(separator: "/")
+            lines.append("ルール：\(rule.startingPoints)持ち\(rule.returnPoints)返し・ウマ \(umaText)")
+        }
         for r in ScoreCalculator.finalResults(for: session) {
             lines.append("\(r.rank)位 \(r.name)  総合\(r.grandTotal.signedPointString)（対局\(r.roundPointTotal.signedPointString) / チップ\(r.chipPointTotal.signedPointString)）")
         }

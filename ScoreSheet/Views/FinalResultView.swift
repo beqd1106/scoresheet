@@ -1,13 +1,18 @@
 import SwiftUI
+import SwiftData
 
 struct FinalResultView: View {
     let session: TableSession
+    @Binding var path: NavigationPath
+    @Environment(\.modelContext) private var context
+
     @State private var vm: FinalResultViewModel
     @State private var shareItems: [Any] = []
     @State private var showShare = false
 
-    init(session: TableSession) {
+    init(session: TableSession, path: Binding<NavigationPath>) {
         self.session = session
+        self._path = path
         _vm = State(initialValue: FinalResultViewModel(session: session))
     }
 
@@ -38,13 +43,25 @@ struct FinalResultView: View {
                     Image(systemName: "chart.xyaxis.line")
                 }
             }
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Button { copyText() } label: { Label("結果をコピー", systemImage: "doc.on.doc") }
+                    Button { exportCSV() } label: { Label("CSVで書き出す", systemImage: "tablecells") }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+            }
         }
         .safeAreaInset(edge: .bottom) {
             HStack(spacing: Space.md) {
-                Button { copyText() } label: { Label("コピー", systemImage: "doc.on.doc") }
-                    .buttonStyle(SecondaryButtonStyle())
-                Button { exportCSV() } label: { Label("CSV出力", systemImage: "square.and.arrow.up") }
-                    .buttonStyle(PrimaryButtonStyle())
+                Button { startRematch() } label: {
+                    Label("同じ設定で再戦", systemImage: "arrow.triangle.2.circlepath")
+                }
+                .buttonStyle(SecondaryButtonStyle())
+                Button { shareText() } label: {
+                    Label("結果を共有", systemImage: "square.and.arrow.up")
+                }
+                .buttonStyle(PrimaryButtonStyle())
             }
             .padding(Space.lg)
             .background(.ultraThinMaterial)
@@ -94,8 +111,13 @@ struct FinalResultView: View {
         Rectangle().fill(Theme.rule).frame(width: Theme.hairline, height: 28)
     }
 
+    // MARK: 操作
+
     private func copyText() {
         UIPasteboard.general.string = vm.shareText
+    }
+
+    private func shareText() {
         shareItems = [vm.shareText]
         showShare = true
     }
@@ -105,6 +127,22 @@ struct FinalResultView: View {
             shareItems = [url]
             showShare = true
         }
+    }
+
+    /// 同じメンバー・同じルールで新しいゲームを作成して開く。
+    private func startRematch() {
+        let next = TableSession(gameType: session.gameType,
+                                participants: session.participants,
+                                pointCoefficientPer1000: session.pointCoefficientPer1000,
+                                chipPointCoefficient: session.chipPointCoefficient,
+                                tags: session.tags,
+                                memo: "",
+                                inputMode: session.inputMode,
+                                rule: session.rule)
+        context.insert(next)
+        try? context.save()
+        path = NavigationPath()      // ホームまで戻してから新しいゲームを開く
+        path.append(next)
     }
 }
 
