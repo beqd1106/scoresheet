@@ -152,6 +152,112 @@ final class RawScoreSettlementTests: XCTestCase {
         XCTAssertEqual(totals(s), [50, 10, -20, -40])
     }
 
+    // MARK: ヤキトリの払い方（場に払う / 人に払う）
+
+    func testYakitoriPotSplitsAmountAmongReceivers() {
+        var rule = GameRule.standard(for: .sanma)
+        rule.yakitoriEnabled = true
+        rule.yakitoriPenalty = 20
+        rule.yakitoriPayee = .others
+        rule.yakitoriUnit = .pot          // 20pt を2人で分ける → 10ptずつ
+        let s = ScoreCalculator.settle(participantIDs: ids(3),
+                                       rawScores: [50000, 35000, 20000],
+                                       yakitoriFlags: [false, false, true],
+                                       rule: rule)
+        XCTAssertEqual(totals(s), [55, 5, -60])
+        XCTAssertEqual(totals(s).reduce(0, +), 0)
+    }
+
+    func testYakitoriPerPersonPaysEachReceiverInFull() {
+        var rule = GameRule.standard(for: .sanma)
+        rule.yakitoriEnabled = true
+        rule.yakitoriPenalty = 20
+        rule.yakitoriPayee = .others
+        rule.yakitoriUnit = .perPerson    // 2人に20ptずつ → 支払いは合計40pt
+        let s = ScoreCalculator.settle(participantIDs: ids(3),
+                                       rawScores: [50000, 35000, 20000],
+                                       yakitoriFlags: [false, false, true],
+                                       rule: rule)
+        XCTAssertEqual(totals(s), [65, 15, -80])
+        XCTAssertEqual(totals(s).reduce(0, +), 0)
+    }
+
+    func testYakitoriPerPersonYonma() {
+        var rule = GameRule.standard(for: .yonma)
+        rule.yakitoriEnabled = true
+        rule.yakitoriPenalty = 20
+        rule.yakitoriPayee = .others
+        rule.yakitoriUnit = .perPerson    // 3人に20ptずつ → 支払いは合計60pt
+        let s = ScoreCalculator.settle(participantIDs: ids(4),
+                                       rawScores: [40000, 30000, 20000, 10000],
+                                       yakitoriFlags: [false, false, false, true],
+                                       rule: rule)
+        XCTAssertEqual(totals(s), [70, 30, 0, -100])
+        XCTAssertEqual(totals(s).reduce(0, +), 0)
+    }
+
+    func testTwoYakitoriPlayersPerPerson() {
+        var rule = GameRule.standard(for: .yonma)
+        rule.yakitoriEnabled = true
+        rule.yakitoriPenalty = 10
+        rule.yakitoriPayee = .others
+        rule.yakitoriUnit = .perPerson
+        let s = ScoreCalculator.settle(participantIDs: ids(4),
+                                       rawScores: [40000, 30000, 20000, 10000],
+                                       yakitoriFlags: [false, false, true, true],
+                                       rule: rule)
+        // 該当2人がそれぞれ非該当2人へ10ptずつ（各自 -20pt、受け取りは各 +20pt）
+        XCTAssertEqual(totals(s), [70, 30, -40, -60])
+        XCTAssertEqual(totals(s).reduce(0, +), 0)
+    }
+
+    func testPayeeTopIsUnaffectedByUnit() {
+        var pot = GameRule.standard(for: .yonma)
+        pot.yakitoriEnabled = true
+        pot.yakitoriPayee = .top
+        pot.yakitoriUnit = .pot
+        var perPerson = pot
+        perPerson.yakitoriUnit = .perPerson
+        let scores = [40000, 30000, 20000, 10000]
+        let flags = [false, false, false, true]
+        let a = ScoreCalculator.settle(participantIDs: ids(4), rawScores: scores,
+                                       yakitoriFlags: flags, rule: pot)
+        let b = ScoreCalculator.settle(participantIDs: ids(4), rawScores: scores,
+                                       yakitoriFlags: flags, rule: perPerson)
+        XCTAssertEqual(totals(a), totals(b))   // 受け取りが1人なら払い方で差は出ない
+    }
+
+    // MARK: 保存形式の互換（設定が増えても古いデータを壊さない）
+
+    func testOldRuleJSONWithoutUnitKeysKeepsOtherSettings() throws {
+        let oldJSON = """
+        {"startingPoints":25000,"returnPoints":30000,"uma":[20,10,-10,-20],
+         "rounding":"gosyaRokunyu","tobiEnabled":true,"tobiPenalty":30,
+         "tobiIncludesZero":true,"tobiPayee":"top","yakitoriEnabled":true,
+         "yakitoriPenalty":20,"yakitoriPayee":"others","kubiEnabled":false,
+         "kubiPenalty":10,"kubiPayee":"top"}
+        """
+        let rule = try JSONDecoder().decode(GameRule.self, from: Data(oldJSON.utf8))
+        XCTAssertEqual(rule.tobiPenalty, 30)
+        XCTAssertTrue(rule.tobiIncludesZero)
+        XCTAssertTrue(rule.yakitoriEnabled)
+        XCTAssertEqual(rule.yakitoriUnit, .pot)     // 無いキーは既定値で補う
+        XCTAssertEqual(rule.tobiUnit, .pot)
+    }
+
+    func testEmptyRuleJSONDecodesToDefaults() throws {
+        let rule = try JSONDecoder().decode(GameRule.self, from: Data("{}".utf8))
+        XCTAssertEqual(rule, GameRule())
+    }
+
+    func testSessionKeepsOldRuleJSON() {
+        let session = TableSession(gameType: .yonma, participants: [])
+        session.ruleJSON = #"{"yakitoriEnabled":true,"yakitoriPenalty":40}"#
+        XCTAssertTrue(session.rule.yakitoriEnabled)
+        XCTAssertEqual(session.rule.yakitoriPenalty, 40)
+        XCTAssertEqual(session.rule.startingPoints, 25000)   // 残りは既定値
+    }
+
     // MARK: クビ（最下位罰符）
 
     func testKubiPenaltyGoesToTop() {

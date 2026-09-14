@@ -75,15 +75,18 @@ enum ScoreCalculator {
             return rawScores[i] < 0 || (rule.tobiIncludesZero && rawScores[i] == 0)
         }
         applyPenalty(&penalty, payers: (0..<n).filter { isTobi[$0] },
-                     amount: rule.tobiPenalty, payee: rule.tobiPayee, topIndex: topIndex, count: n)
+                     amount: rule.tobiPenalty, payee: rule.tobiPayee, unit: rule.tobiUnit,
+                     topIndex: topIndex, count: n)
 
         let isYakitori = (0..<n).map { rule.yakitoriEnabled && yakitori[$0] }
         applyPenalty(&penalty, payers: (0..<n).filter { isYakitori[$0] },
-                     amount: rule.yakitoriPenalty, payee: rule.yakitoriPayee, topIndex: topIndex, count: n)
+                     amount: rule.yakitoriPenalty, payee: rule.yakitoriPayee, unit: rule.yakitoriUnit,
+                     topIndex: topIndex, count: n)
 
         if rule.kubiEnabled {
             applyPenalty(&penalty, payers: (0..<n).filter { rankOf[$0] == n },
-                         amount: rule.kubiPenalty, payee: rule.kubiPayee, topIndex: topIndex, count: n)
+                         amount: rule.kubiPenalty, payee: rule.kubiPayee, unit: rule.kubiUnit,
+                         topIndex: topIndex, count: n)
         }
 
         // 5) オカ＋端数をトップへ
@@ -103,25 +106,37 @@ enum ScoreCalculator {
     }
 
     /// 罰符の授受を penalty 配列へ加算する。
+    /// ・場に払う(.pot)   … 支払う人が 1口ぶんを出し、受け取る人で分ける
+    /// ・人に払う(.perPerson) … 受け取る人ごとに満額を払う（支払いは人数倍）
     /// 山分けで割り切れない分はここでは配らず、最後のトップ調整で吸収させる。
     private static func applyPenalty(_ penalty: inout [Int],
                                      payers: [Int],
                                      amount: Int,
                                      payee: PenaltyPayee,
+                                     unit: PenaltyUnit,
                                      topIndex: Int,
                                      count: Int) {
         guard !payers.isEmpty, amount != 0 else { return }
-        let pot = amount * payers.count
-        for i in payers { penalty[i] -= amount }
+        let baseReceivers: [Int] = payee == .top
+            ? [topIndex]
+            : (0..<count).filter { !payers.contains($0) }
 
-        switch payee {
-        case .top:
-            penalty[topIndex] += pot
-        case .others:
-            let receivers = (0..<count).filter { !payers.contains($0) }
-            guard !receivers.isEmpty else { return }
-            let each = pot / receivers.count
-            for i in receivers { penalty[i] += each }
+        for payer in payers {
+            // 自分から自分へは払わない（該当者がトップだった場合など）。
+            let receivers = baseReceivers.filter { $0 != payer }
+            guard !receivers.isEmpty else { continue }
+
+            switch unit {
+            case .perPerson:
+                for i in receivers {
+                    penalty[i] += amount
+                    penalty[payer] -= amount
+                }
+            case .pot:
+                penalty[payer] -= amount
+                let each = amount / receivers.count
+                for i in receivers { penalty[i] += each }
+            }
         }
     }
 

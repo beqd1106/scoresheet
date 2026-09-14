@@ -160,7 +160,8 @@ struct RuleEditor: View {
                 note: "持ち点がマイナスになった人が支払います。",
                 isOn: $rule.tobiEnabled,
                 amount: $rule.tobiPenalty,
-                payee: $rule.tobiPayee
+                payee: $rule.tobiPayee,
+                unit: $rule.tobiUnit
             ) {
                 VStack(alignment: .leading, spacing: Space.sm) {
                     Text("0点ちょうどの扱い").font(AppFont.body(13)).foregroundStyle(Theme.inkSecond)
@@ -177,7 +178,8 @@ struct RuleEditor: View {
                 note: "その回戦で1度も和了できなかった人が支払います。対象は回戦ごとに指定します。",
                 isOn: $rule.yakitoriEnabled,
                 amount: $rule.yakitoriPenalty,
-                payee: $rule.yakitoriPayee
+                payee: $rule.yakitoriPayee,
+                unit: $rule.yakitoriUnit
             ) { EmptyView() }
 
             penaltyCard(
@@ -185,7 +187,8 @@ struct RuleEditor: View {
                 note: "最下位の人が支払います。",
                 isOn: $rule.kubiEnabled,
                 amount: $rule.kubiPenalty,
-                payee: $rule.kubiPayee
+                payee: $rule.kubiPayee,
+                unit: $rule.kubiUnit
             ) { EmptyView() }
         }
     }
@@ -195,6 +198,7 @@ struct RuleEditor: View {
                                           isOn: Binding<Bool>,
                                           amount: Binding<Int>,
                                           payee: Binding<PenaltyPayee>,
+                                          unit: Binding<PenaltyUnit>,
                                           @ViewBuilder extra: () -> Extra) -> some View {
         NoteCard {
             VStack(alignment: .leading, spacing: Space.md) {
@@ -214,6 +218,19 @@ struct RuleEditor: View {
                             ForEach(PenaltyPayee.allCases) { Text($0.displayName).tag($0) }
                         }
                         .pickerStyle(.segmented)
+                    }
+
+                    // 受け取る人が複数いるときだけ、払い方で金額が変わる。
+                    if payee.wrappedValue == .others {
+                        VStack(alignment: .leading, spacing: Space.sm) {
+                            Text("払い方").font(AppFont.body(13)).foregroundStyle(Theme.inkSecond)
+                            Picker("払い方", selection: unit) {
+                                ForEach(PenaltyUnit.allCases) { Text($0.displayName).tag($0) }
+                            }
+                            .pickerStyle(.segmented)
+                            Text(unit.wrappedValue.detail(amount: amount.wrappedValue, receivers: n - 1))
+                                .font(AppFont.body(12)).foregroundStyle(Theme.inkFaint)
+                        }
                     }
                     extra()
                 }

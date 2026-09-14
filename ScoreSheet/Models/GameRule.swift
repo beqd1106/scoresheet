@@ -50,6 +50,26 @@ enum PenaltyPayee: String, Codable, CaseIterable, Identifiable {
     var displayName: String { self == .top ? "トップが受け取る" : "他の人で山分け" }
 }
 
+/// 罰符の払い方（受け取る人が複数いるときだけ意味を持つ）。
+enum PenaltyUnit: String, Codable, CaseIterable, Identifiable {
+    case pot        // 場に払う：罰符の総額を受け取る人で分ける（20pt を2人なら 10pt ずつ）
+    case perPerson  // 人に払う：受け取る人ごとに満額（20pt を2人なら 20pt ずつ・合計40pt）
+
+    var id: String { rawValue }
+    var displayName: String { self == .pot ? "場に払う" : "人に払う" }
+
+    /// 設定画面での説明文。amount は現在の罰符額。
+    func detail(amount: Int, receivers: Int) -> String {
+        let count = max(receivers, 1)
+        switch self {
+        case .pot:
+            return "罰符 \(amount)pt を受け取る\(count)人で分けます（1人あたり約\(amount / count)pt）。"
+        case .perPerson:
+            return "受け取る\(count)人それぞれに \(amount)pt ずつ払います（支払いは合計 \(amount * count)pt）。"
+        }
+    }
+}
+
 /// 素点入力モードで使う対局ルール。
 /// すべて 1000点 = 1ポイント換算（既存のポイント欄と同じ単位）で扱う。
 struct GameRule: Codable, Equatable {
@@ -65,16 +85,19 @@ struct GameRule: Codable, Equatable {
     var tobiPenalty: Int = 20           // 該当者が支払うポイント
     var tobiIncludesZero: Bool = false  // 0点ちょうどもトビとみなすか
     var tobiPayee: PenaltyPayee = .top
+    var tobiUnit: PenaltyUnit = .pot
 
     // MARK: ヤキトリ（1回も和了なし）
     var yakitoriEnabled: Bool = false
     var yakitoriPenalty: Int = 20
     var yakitoriPayee: PenaltyPayee = .others
+    var yakitoriUnit: PenaltyUnit = .pot
 
     // MARK: クビ（最下位の罰符）
     var kubiEnabled: Bool = false
     var kubiPenalty: Int = 10
     var kubiPayee: PenaltyPayee = .top
+    var kubiUnit: PenaltyUnit = .pot
 
     // MARK: 導出値
 
@@ -153,4 +176,35 @@ struct RulePreset: Identifiable, Hashable {
             return r
         }
     ]
+}
+
+// MARK: - 前後のバージョンと互換に読むためのデコード
+// 保存済み JSON に無いキーは既定値で補う。
+// （項目が増えても、古いデータのルール設定が丸ごと初期化されないようにするため）
+extension GameRule {
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let d = GameRule()
+        self.init()
+        startingPoints = try c.decodeIfPresent(Int.self, forKey: .startingPoints) ?? d.startingPoints
+        returnPoints = try c.decodeIfPresent(Int.self, forKey: .returnPoints) ?? d.returnPoints
+        uma = try c.decodeIfPresent([Int].self, forKey: .uma) ?? d.uma
+        rounding = try c.decodeIfPresent(RoundingMode.self, forKey: .rounding) ?? d.rounding
+
+        tobiEnabled = try c.decodeIfPresent(Bool.self, forKey: .tobiEnabled) ?? d.tobiEnabled
+        tobiPenalty = try c.decodeIfPresent(Int.self, forKey: .tobiPenalty) ?? d.tobiPenalty
+        tobiIncludesZero = try c.decodeIfPresent(Bool.self, forKey: .tobiIncludesZero) ?? d.tobiIncludesZero
+        tobiPayee = try c.decodeIfPresent(PenaltyPayee.self, forKey: .tobiPayee) ?? d.tobiPayee
+        tobiUnit = try c.decodeIfPresent(PenaltyUnit.self, forKey: .tobiUnit) ?? d.tobiUnit
+
+        yakitoriEnabled = try c.decodeIfPresent(Bool.self, forKey: .yakitoriEnabled) ?? d.yakitoriEnabled
+        yakitoriPenalty = try c.decodeIfPresent(Int.self, forKey: .yakitoriPenalty) ?? d.yakitoriPenalty
+        yakitoriPayee = try c.decodeIfPresent(PenaltyPayee.self, forKey: .yakitoriPayee) ?? d.yakitoriPayee
+        yakitoriUnit = try c.decodeIfPresent(PenaltyUnit.self, forKey: .yakitoriUnit) ?? d.yakitoriUnit
+
+        kubiEnabled = try c.decodeIfPresent(Bool.self, forKey: .kubiEnabled) ?? d.kubiEnabled
+        kubiPenalty = try c.decodeIfPresent(Int.self, forKey: .kubiPenalty) ?? d.kubiPenalty
+        kubiPayee = try c.decodeIfPresent(PenaltyPayee.self, forKey: .kubiPayee) ?? d.kubiPayee
+        kubiUnit = try c.decodeIfPresent(PenaltyUnit.self, forKey: .kubiUnit) ?? d.kubiUnit
+    }
 }
