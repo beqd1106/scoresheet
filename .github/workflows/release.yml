@@ -45,7 +45,7 @@ jobs:
 
       - name: Generate Xcode project (build number = run number)
         run: |
-          sed -i '' "s/CURRENT_PROJECT_VERSION: \"1\"/CURRENT_PROJECT_VERSION: \"${{ github.run_number }}\"/" project.yml
+          sed -i '' -E "s/CURRENT_PROJECT_VERSION: \"[0-9]+\"/CURRENT_PROJECT_VERSION: \"${{ github.run_number }}\"/" project.yml
           xcodegen generate
 
       - name: Initialize keychain
