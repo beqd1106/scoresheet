@@ -16,6 +16,8 @@ struct TableScoreView: View {
     @State private var rows: [[String]] = []
     /// yakitori[roundIndex][playerIndex] = ヤキトリ該当フラグ。
     @State private var yakitori: [[Bool]] = []
+    /// busters[roundIndex][playerIndex] = その人を飛ばした人（トビ罰符の受取先）。
+    @State private var busters: [[UUID?]] = []
     @State private var chipText: [String] = []
     @State private var loaded = false
     @State private var showSettings = false
@@ -62,6 +64,8 @@ struct TableScoreView: View {
                             .foregroundStyle(Theme.inkFaint)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.top, Space.lg)
+                        busterPrompt
+                            .padding(.top, Space.lg)
                     } header: {
                         tableHeader(colW: colW)
                     }
@@ -95,6 +99,7 @@ struct TableScoreView: View {
         .onChange(of: session.inputModeRaw) { _, _ in reloadFromSession() }
         .onChange(of: rows) { _, _ in if loaded { scheduleSave() } }
         .onChange(of: yakitori) { _, _ in if loaded { scheduleSave() } }
+        .onChange(of: busters) { _, _ in if loaded { scheduleSave() } }
         .onChange(of: chipText) { _, _ in if loaded { scheduleSave() } }
         // アプリが背面に回る・画面を離れるタイミングでは待たずに保存する。
         .onChange(of: scenePhase) { _, phase in if phase != .active { saveNow() } }
@@ -336,6 +341,26 @@ struct TableScoreView: View {
     /// 回戦ラベル。タップで削除・ヤキトリ指定のメニュー。
     private func roundLabel(_ r: Int, warn: Color?) -> some View {
         Menu {
+            if isRaw && rule.tobiEnabled && rule.tobiPayee == .buster {
+                ForEach(tobiIndices(r), id: \.self) { c in
+                    Menu("\(participants[c].name)を飛ばした人") {
+                        ForEach(Array(participants.enumerated()), id: \.element.id) { idx, p in
+                            if idx != c {
+                                Button {
+                                    setBuster(r, c, p.id)
+                                } label: {
+                                    Label(p.name, systemImage: busterAt(r, c) == p.id ? "checkmark.circle.fill" : "circle")
+                                }
+                            }
+                        }
+                        if busterAt(r, c) != nil {
+                            Button(role: .destructive) { setBuster(r, c, nil) } label: {
+                                Label("指定を外す", systemImage: "xmark.circle")
+                            }
+                        }
+                    }
+                }
+            }
             if isRaw && rule.yakitoriEnabled {
                 Section("ヤキトリ（和了なし）") {
                     ForEach(Array(participants.enumerated()), id: \.element.id) { idx, p in
@@ -384,7 +409,13 @@ struct TableScoreView: View {
                         Text("焼").font(AppFont.body(9, weight: .bold)).foregroundStyle(Theme.accentYellow)
                     }
                     if let s = settlement, s.isTobi {
-                        Text("飛").font(AppFont.body(9, weight: .bold)).foregroundStyle(Theme.accentRed)
+                        // 「飛ばした人」を待っている状態は黄色で知らせる。
+                        let waiting = rule.tobiPayee == .buster && busterAt(r, c) == nil
+                        Text("飛").font(AppFont.body(9, weight: .bold))
+                            .foregroundStyle(waiting ? Theme.accentYellow : Theme.accentRed)
+                    }
+                    if let s = settlement, s.isKubi {
+                        Text("首").font(AppFont.body(9, weight: .bold)).foregroundStyle(Theme.accentRed)
                     }
                     if let s = settlement {
                         Text(s.total.signedPointString)
@@ -442,6 +473,7 @@ struct TableScoreView: View {
         return ScoreCalculator.settle(participantIDs: participants.map(\.id),
                                       rawScores: scores,
                                       yakitoriFlags: yakitoriRow(r),
+                                      busterIDs: busterRow(r),
                                       rule: rule)
     }
 
@@ -579,6 +611,80 @@ struct TableScoreView: View {
         yakitori[r][c].toggle()
     }
 
+    // MARK: トビ（飛ばした人）
+
+    private func busterRow(_ r: Int) -> [UUID?] {
+        guard r < busters.count, busters[r].count == n else { return Array(repeating: nil, count: n) }
+        return busters[r]
+    }
+    private func busterAt(_ r: Int, _ c: Int) -> UUID? {
+        r < busters.count && c < busters[r].count ? busters[r][c] : nil
+    }
+    private func setBuster(_ r: Int, _ c: Int, _ id: UUID?) {
+        guard r < busters.count, c < busters[r].count else { return }
+        busters[r][c] = id
+    }
+
+    /// その回戦でトビになっている人の列番号。
+    private func tobiIndices(_ r: Int) -> [Int] {
+        guard isRaw, rule.tobiEnabled, r < rows.count else { return [] }
+        return rows[r].indices.filter { c in
+            guard let v = Int(rows[r][c]) else { return false }
+            return v < 0 || (rule.tobiIncludesZero && v == 0)
+        }
+    }
+
+    /// 「飛ばした人が受け取る」設定で、まだ相手が決まっていないもの。
+    private var pendingBusters: [(round: Int, player: Int)] {
+        guard isRaw, rule.tobiEnabled, rule.tobiPayee == .buster else { return [] }
+        var out: [(Int, Int)] = []
+        for r in rows.indices {
+            for c in tobiIndices(r) where busterAt(r, c) == nil { out.append((r, c)) }
+        }
+        return out
+    }
+
+    /// 表の下に出す指定カード。名前をタップするだけで決められるようにする。
+    @ViewBuilder
+    private var busterPrompt: some View {
+        let pending = pendingBusters
+        if !pending.isEmpty {
+            VStack(alignment: .leading, spacing: Space.md) {
+                SectionLabel(text: "飛ばした人を指定", systemImage: "exclamationmark.triangle")
+                ForEach(pending.indices, id: \.self) { i in
+                    let r = pending[i].round
+                    let c = pending[i].player
+                    NoteCard(padding: Space.md) {
+                        VStack(alignment: .leading, spacing: Space.sm) {
+                            Text("\(r + 1)回戦　\(participants[c].name) を飛ばしたのは？")
+                                .font(AppFont.body(14, weight: .semibold))
+                                .foregroundStyle(Theme.ink)
+                            FlowLayout(spacing: Space.sm) {
+                                ForEach(Array(participants.enumerated()), id: \.element.id) { idx, p in
+                                    if idx != c {
+                                        Button { setBuster(r, c, p.id) } label: { playerChip(p) }
+                                            .buttonStyle(.plain)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                Text("指定するまではトップが受け取る扱いで計算します。")
+                    .font(AppFont.body(12)).foregroundStyle(Theme.inkFaint)
+            }
+        }
+    }
+
+    private func playerChip(_ p: Participant) -> some View {
+        HStack(spacing: Space.xs) {
+            PlayerDot(colorHex: p.colorHex, size: 8)
+            Text(p.name).font(AppFont.body(14, weight: .medium)).foregroundStyle(Theme.accent)
+        }
+        .padding(.horizontal, Space.md).padding(.vertical, Space.sm)
+        .background(RoundedRectangle(cornerRadius: Radius.pill).fill(Theme.accent.opacity(0.10)))
+    }
+
     // MARK: 行操作
 
     private func loadIfNeeded() {
@@ -599,9 +705,15 @@ struct TableScoreView: View {
                 round.points.first { $0.participantID == p.id }?.isYakitori ?? false
             }
         }
+        busters = sorted.map { round in
+            participants.map { p in
+                round.points.first { $0.participantID == p.id }?.busterID
+            }
+        }
         if rows.isEmpty {
             rows = [Array(repeating: "", count: n)]   // 最初の1回戦
             yakitori = [Array(repeating: false, count: n)]
+            busters = [Array(repeating: nil, count: n)]
         }
         chipText = participants.map { p in
             let c = session.chipCount(for: p.id)
@@ -621,6 +733,7 @@ struct TableScoreView: View {
     private func addRound() {
         rows.append(Array(repeating: "", count: n))
         yakitori.append(Array(repeating: false, count: n))
+        busters.append(Array(repeating: nil, count: n))
     }
 
     /// その回戦で空欄がちょうど1つなら、想定合計になるよう自動補完。
@@ -649,9 +762,11 @@ struct TableScoreView: View {
         guard r < rows.count else { return }
         rows.remove(at: r)
         if r < yakitori.count { yakitori.remove(at: r) }
+        if r < busters.count { busters.remove(at: r) }
         if rows.isEmpty {
             rows = [Array(repeating: "", count: n)]
             yakitori = [Array(repeating: false, count: n)]
+            busters = [Array(repeating: nil, count: n)]
         }
     }
 
@@ -729,7 +844,8 @@ struct TableScoreView: View {
                                         point: s?.total ?? 0,
                                         isAutoCalculated: s != nil,
                                         rawScore: raw,
-                                        isYakitori: isYakitori(r, i))
+                                        isYakitori: isYakitori(r, i),
+                                        busterID: busterAt(r, i))
             }
         }
 

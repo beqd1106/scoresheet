@@ -45,9 +45,30 @@ enum RoundingMode: String, Codable, CaseIterable, Identifiable {
 enum PenaltyPayee: String, Codable, CaseIterable, Identifiable {
     case top       // トップが総取り
     case others    // 該当者以外で山分け
+    case buster    // 飛ばした人が受け取る（トビ専用）
 
     var id: String { rawValue }
-    var displayName: String { self == .top ? "トップが受け取る" : "他の人で山分け" }
+
+    /// セグメント表示用の短いラベル。
+    var shortLabel: String {
+        switch self {
+        case .top:    return "トップ"
+        case .others: return "山分け"
+        case .buster: return "飛ばした人"
+        }
+    }
+
+    var displayName: String {
+        switch self {
+        case .top:    return "トップが受け取る"
+        case .others: return "該当者以外で山分け"
+        case .buster: return "飛ばした人が受け取る"
+        }
+    }
+
+    /// トビだけは「飛ばした人が受け取る」を選べる。
+    static let tobiCases: [PenaltyPayee] = [.top, .others, .buster]
+    static let standardCases: [PenaltyPayee] = [.top, .others]
 }
 
 /// 罰符の払い方（受け取る人が複数いるときだけ意味を持つ）。
@@ -68,6 +89,15 @@ enum PenaltyUnit: String, Codable, CaseIterable, Identifiable {
             return "受け取る\(count)人それぞれに \(amount)pt ずつ払います（支払いは合計 \(amount * count)pt）。"
         }
     }
+}
+
+/// クビ（罰符）の判定条件。
+enum KubiCondition: String, Codable, CaseIterable, Identifiable {
+    case belowThreshold   // 基準点に届かなかった人（例：20000点なければ罰符）
+    case lastPlace        // 最下位の人
+
+    var id: String { rawValue }
+    var displayName: String { self == .belowThreshold ? "基準点未満" : "最下位" }
 }
 
 /// 素点入力モードで使う対局ルール。
@@ -93,8 +123,10 @@ struct GameRule: Codable, Equatable {
     var yakitoriPayee: PenaltyPayee = .others
     var yakitoriUnit: PenaltyUnit = .pot
 
-    // MARK: クビ（最下位の罰符）
+    // MARK: クビ（基準点に届かない人・または最下位の罰符）
     var kubiEnabled: Bool = false
+    var kubiCondition: KubiCondition = .belowThreshold
+    var kubiThreshold: Int = 20000      // この点数に届かなければ罰符
     var kubiPenalty: Int = 10
     var kubiPayee: PenaltyPayee = .top
     var kubiUnit: PenaltyUnit = .pot
@@ -203,6 +235,8 @@ extension GameRule {
         yakitoriUnit = try c.decodeIfPresent(PenaltyUnit.self, forKey: .yakitoriUnit) ?? d.yakitoriUnit
 
         kubiEnabled = try c.decodeIfPresent(Bool.self, forKey: .kubiEnabled) ?? d.kubiEnabled
+        kubiCondition = try c.decodeIfPresent(KubiCondition.self, forKey: .kubiCondition) ?? d.kubiCondition
+        kubiThreshold = try c.decodeIfPresent(Int.self, forKey: .kubiThreshold) ?? d.kubiThreshold
         kubiPenalty = try c.decodeIfPresent(Int.self, forKey: .kubiPenalty) ?? d.kubiPenalty
         kubiPayee = try c.decodeIfPresent(PenaltyPayee.self, forKey: .kubiPayee) ?? d.kubiPayee
         kubiUnit = try c.decodeIfPresent(PenaltyUnit.self, forKey: .kubiUnit) ?? d.kubiUnit

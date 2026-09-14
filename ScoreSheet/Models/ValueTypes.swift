@@ -26,9 +26,11 @@ struct PlayerRoundPoint: Codable, Hashable, Identifiable {
     var isAutoCalculated: Bool  // トップの自動計算値なら true
     var rawScore: Int?          // 素点モード：終局時の持ち点
     var isYakitori: Bool?       // 素点モード：ヤキトリ該当
+    var busterID: UUID?         // 素点モード：この人を飛ばした人（トビ罰符の受取先に使う）
 
     init(id: UUID = UUID(), participantID: UUID, rank: Int, point: Int,
-         isAutoCalculated: Bool, rawScore: Int? = nil, isYakitori: Bool? = nil) {
+         isAutoCalculated: Bool, rawScore: Int? = nil, isYakitori: Bool? = nil,
+         busterID: UUID? = nil) {
         self.id = id
         self.participantID = participantID
         self.rank = rank
@@ -36,6 +38,7 @@ struct PlayerRoundPoint: Codable, Hashable, Identifiable {
         self.isAutoCalculated = isAutoCalculated
         self.rawScore = rawScore
         self.isYakitori = isYakitori
+        self.busterID = busterID
     }
 }
 
@@ -50,6 +53,7 @@ struct RoundSettlement: Identifiable, Equatable {
     var okaPoint: Int       // オカ＋端数調整（トップのみ）
     var isTobi: Bool
     var isYakitori: Bool
+    var isKubi: Bool = false
 
     /// この回戦の最終ポイント。
     var total: Int { basePoint + umaPoint + penaltyPoint + okaPoint }

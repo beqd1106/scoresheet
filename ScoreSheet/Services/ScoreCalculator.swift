@@ -46,6 +46,7 @@ enum ScoreCalculator {
     static func settle(participantIDs: [UUID],
                        rawScores: [Int],
                        yakitoriFlags: [Bool],
+                       busterIDs: [UUID?] = [],
                        rule: GameRule) -> [RoundSettlement] {
         let n = participantIDs.count
         guard n > 0, rawScores.count == n else { return [] }
@@ -74,20 +75,36 @@ enum ScoreCalculator {
             guard rule.tobiEnabled else { return false }
             return rawScores[i] < 0 || (rule.tobiIncludesZero && rawScores[i] == 0)
         }
+        // 「飛ばした人が受け取る」設定のときは、支払う人ごとに受取先が変わる。
+        // 指定がない場合はトップが受け取る（入力待ちでも計算が止まらないように）。
+        let busters = busterIDs.count == n ? busterIDs : Array(repeating: nil, count: n)
+        var busterIndexOf: [Int: Int] = [:]
+        if rule.tobiPayee == .buster {
+            for i in 0..<n where isTobi[i] {
+                if let bid = busters[i], let idx = participantIDs.firstIndex(of: bid), idx != i {
+                    busterIndexOf[i] = idx
+                }
+            }
+        }
         applyPenalty(&penalty, payers: (0..<n).filter { isTobi[$0] },
                      amount: rule.tobiPenalty, payee: rule.tobiPayee, unit: rule.tobiUnit,
-                     topIndex: topIndex, count: n)
+                     topIndex: topIndex, count: n, receiverOverride: busterIndexOf)
 
         let isYakitori = (0..<n).map { rule.yakitoriEnabled && yakitori[$0] }
         applyPenalty(&penalty, payers: (0..<n).filter { isYakitori[$0] },
                      amount: rule.yakitoriPenalty, payee: rule.yakitoriPayee, unit: rule.yakitoriUnit,
                      topIndex: topIndex, count: n)
 
-        if rule.kubiEnabled {
-            applyPenalty(&penalty, payers: (0..<n).filter { rankOf[$0] == n },
-                         amount: rule.kubiPenalty, payee: rule.kubiPayee, unit: rule.kubiUnit,
-                         topIndex: topIndex, count: n)
+        let isKubi = (0..<n).map { i -> Bool in
+            guard rule.kubiEnabled else { return false }
+            switch rule.kubiCondition {
+            case .lastPlace:      return rankOf[i] == n
+            case .belowThreshold: return rawScores[i] < rule.kubiThreshold
+            }
         }
+        applyPenalty(&penalty, payers: (0..<n).filter { isKubi[$0] },
+                     amount: rule.kubiPenalty, payee: rule.kubiPayee, unit: rule.kubiUnit,
+                     topIndex: topIndex, count: n)
 
         // 5) オカ＋端数をトップへ
         let subtotal = (0..<n).map { base[$0] + umaPt[$0] + penalty[$0] }
@@ -101,7 +118,8 @@ enum ScoreCalculator {
                             penaltyPoint: penalty[i],
                             okaPoint: i == topIndex ? residue : 0,
                             isTobi: isTobi[i],
-                            isYakitori: isYakitori[i])
+                            isYakitori: isYakitori[i],
+                            isKubi: isKubi[i])
         }
     }
 
@@ -115,15 +133,17 @@ enum ScoreCalculator {
                                      payee: PenaltyPayee,
                                      unit: PenaltyUnit,
                                      topIndex: Int,
-                                     count: Int) {
+                                     count: Int,
+                                     receiverOverride: [Int: Int] = [:]) {
         guard !payers.isEmpty, amount != 0 else { return }
-        let baseReceivers: [Int] = payee == .top
-            ? [topIndex]
-            : (0..<count).filter { !payers.contains($0) }
+        let baseReceivers: [Int] = payee == .others
+            ? (0..<count).filter { !payers.contains($0) }
+            : [topIndex]   // .top と、受取先未指定の .buster はトップ
 
         for payer in payers {
             // 自分から自分へは払わない（該当者がトップだった場合など）。
-            let receivers = baseReceivers.filter { $0 != payer }
+            let receivers = (receiverOverride[payer].map { [$0] } ?? baseReceivers)
+                .filter { $0 != payer }
             guard !receivers.isEmpty else { continue }
 
             switch unit {

@@ -260,9 +260,10 @@ final class RawScoreSettlementTests: XCTestCase {
 
     // MARK: クビ（最下位罰符）
 
-    func testKubiPenaltyGoesToTop() {
+    func testKubiLastPlacePenaltyGoesToTop() {
         var rule = GameRule.standard(for: .yonma)
         rule.kubiEnabled = true
+        rule.kubiCondition = .lastPlace
         rule.kubiPenalty = 10
         rule.kubiPayee = .top
         let s = ScoreCalculator.settle(participantIDs: ids(4),
@@ -270,6 +271,82 @@ final class RawScoreSettlementTests: XCTestCase {
                                        yakitoriFlags: Array(repeating: false, count: 4),
                                        rule: rule)
         XCTAssertEqual(totals(s), [60, 10, -20, -50])
+        XCTAssertEqual(totals(s).reduce(0, +), 0)
+    }
+
+    func testKubiBelowThresholdCatchesEveryoneUnderTheLine() {
+        var rule = GameRule.standard(for: .yonma)
+        rule.kubiEnabled = true
+        rule.kubiCondition = .belowThreshold
+        rule.kubiThreshold = 25000      // 25000点に届かなければ罰符
+        rule.kubiPenalty = 10
+        rule.kubiPayee = .top
+        let s = ScoreCalculator.settle(participantIDs: ids(4),
+                                       rawScores: [40000, 30000, 20000, 10000],
+                                       yakitoriFlags: Array(repeating: false, count: 4),
+                                       rule: rule)
+        // 20000 と 10000 の2人が該当（30000 は基準以上なので対象外）
+        XCTAssertEqual(s.map(\.isKubi), [false, false, true, true])
+        XCTAssertEqual(totals(s), [70, 10, -30, -50])
+        XCTAssertEqual(totals(s).reduce(0, +), 0)
+    }
+
+    func testKubiThresholdIsExclusive() {
+        var rule = GameRule.standard(for: .yonma)
+        rule.kubiEnabled = true
+        rule.kubiCondition = .belowThreshold
+        rule.kubiThreshold = 20000
+        rule.kubiPenalty = 10
+        let s = ScoreCalculator.settle(participantIDs: ids(4),
+                                       rawScores: [40000, 30000, 20000, 10000],
+                                       yakitoriFlags: Array(repeating: false, count: 4),
+                                       rule: rule)
+        XCTAssertEqual(s.map(\.isKubi), [false, false, false, true])   // ちょうど20000は対象外
+    }
+
+    // MARK: トビ罰符を飛ばした人が受け取る
+
+    func testTobiPenaltyGoesToTheNamedBuster() {
+        var rule = GameRule.standard(for: .yonma)
+        rule.tobiEnabled = true
+        rule.tobiPenalty = 20
+        rule.tobiPayee = .buster
+        let players = ids(4)
+        let s = ScoreCalculator.settle(participantIDs: players,
+                                       rawScores: [61000, 30000, 10000, -1000],
+                                       yakitoriFlags: Array(repeating: false, count: 4),
+                                       busterIDs: [nil, nil, nil, players[1]],   // 2番目の人が飛ばした
+                                       rule: rule)
+        XCTAssertEqual(totals(s), [71, 30, -30, -71])
+        XCTAssertEqual(totals(s).reduce(0, +), 0)
+    }
+
+    func testTobiFallsBackToTopWhenBusterIsNotChosen() {
+        var rule = GameRule.standard(for: .yonma)
+        rule.tobiEnabled = true
+        rule.tobiPenalty = 20
+        rule.tobiPayee = .buster
+        let s = ScoreCalculator.settle(participantIDs: ids(4),
+                                       rawScores: [61000, 30000, 10000, -1000],
+                                       yakitoriFlags: Array(repeating: false, count: 4),
+                                       busterIDs: [nil, nil, nil, nil],
+                                       rule: rule)
+        XCTAssertEqual(totals(s), [91, 10, -30, -71])   // 指定されるまではトップが受け取る
+        XCTAssertEqual(totals(s).reduce(0, +), 0)
+    }
+
+    func testBusterPointingAtThemselvesIsIgnored() {
+        var rule = GameRule.standard(for: .yonma)
+        rule.tobiEnabled = true
+        rule.tobiPenalty = 20
+        rule.tobiPayee = .buster
+        let players = ids(4)
+        let s = ScoreCalculator.settle(participantIDs: players,
+                                       rawScores: [61000, 30000, 10000, -1000],
+                                       yakitoriFlags: Array(repeating: false, count: 4),
+                                       busterIDs: [nil, nil, nil, players[3]],   // 自分自身
+                                       rule: rule)
+        XCTAssertEqual(totals(s), [91, 10, -30, -71])   // トップ受け取りに戻る
         XCTAssertEqual(totals(s).reduce(0, +), 0)
     }
 

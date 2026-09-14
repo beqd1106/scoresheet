@@ -161,6 +161,7 @@ struct RuleEditor: View {
                 isOn: $rule.tobiEnabled,
                 amount: $rule.tobiPenalty,
                 payee: $rule.tobiPayee,
+                payeeOptions: PenaltyPayee.tobiCases,
                 unit: $rule.tobiUnit
             ) {
                 VStack(alignment: .leading, spacing: Space.sm) {
@@ -183,13 +184,27 @@ struct RuleEditor: View {
             ) { EmptyView() }
 
             penaltyCard(
-                title: "クビ（最下位罰符）",
-                note: "最下位の人が支払います。",
+                title: "クビ",
+                note: "基準点に届かなかった人が支払います（条件は最下位にも変えられます）。",
                 isOn: $rule.kubiEnabled,
                 amount: $rule.kubiPenalty,
                 payee: $rule.kubiPayee,
                 unit: $rule.kubiUnit
-            ) { EmptyView() }
+            ) {
+                VStack(alignment: .leading, spacing: Space.sm) {
+                    Text("条件").font(AppFont.body(13)).foregroundStyle(Theme.inkSecond)
+                    Picker("条件", selection: $rule.kubiCondition) {
+                        ForEach(KubiCondition.allCases) { Text($0.displayName).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    if rule.kubiCondition == .belowThreshold {
+                        stepperRow(title: "基準点", value: $rule.kubiThreshold,
+                                   range: 0...60000, step: 1000, unit: "点")
+                        Text("\(rule.kubiThreshold)点に届かなかった人が \(rule.kubiPenalty)pt を払います（複数人いれば全員）。")
+                            .font(AppFont.body(12)).foregroundStyle(Theme.inkFaint)
+                    }
+                }
+            }
         }
     }
 
@@ -198,6 +213,7 @@ struct RuleEditor: View {
                                           isOn: Binding<Bool>,
                                           amount: Binding<Int>,
                                           payee: Binding<PenaltyPayee>,
+                                          payeeOptions: [PenaltyPayee] = PenaltyPayee.standardCases,
                                           unit: Binding<PenaltyUnit>,
                                           @ViewBuilder extra: () -> Extra) -> some View {
         NoteCard {
@@ -215,9 +231,13 @@ struct RuleEditor: View {
                     VStack(alignment: .leading, spacing: Space.sm) {
                         Text("受け取り").font(AppFont.body(13)).foregroundStyle(Theme.inkSecond)
                         Picker("受け取り", selection: payee) {
-                            ForEach(PenaltyPayee.allCases) { Text($0.displayName).tag($0) }
+                            ForEach(payeeOptions) { Text($0.shortLabel).tag($0) }
                         }
                         .pickerStyle(.segmented)
+                        Text(payee.wrappedValue == .buster
+                             ? "飛ばした人が受け取ります。誰が飛ばしたかは、各回戦で回戦番号をタップして名前で指定します（未指定のあいだはトップが受け取ります）。"
+                             : payee.wrappedValue.displayName + "。")
+                            .font(AppFont.body(12)).foregroundStyle(Theme.inkFaint)
                     }
 
                     // 受け取る人が複数いるときだけ、払い方で金額が変わる。
