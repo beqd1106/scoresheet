@@ -206,9 +206,15 @@ struct TableScoreView: View {
     }
 
     private var hintText: String {
-        isRaw
-        ? "終局時の持ち点を入力すると、ウマ・オカ・罰符を含めたポイントを自動計算します。1人だけ空欄でEnterを押すと残りを自動補完します。"
-        : "各回、全員の合計が 0 になるように入力してください。1人だけ空欄でEnterを押すと自動計算します。"
+        guard isRaw else {
+            return "各回、全員の合計が 0 になるように入力してください。1人だけ空欄でEnterを押すと自動計算します。"
+        }
+        var text = "終局時の持ち点を入力すると、ウマ・オカ・罰符を含めたポイントを自動計算します。"
+        text += "全員の合計が \(session.expectedTotalScore) 点になるのが目安です（1人だけ空欄でEnterを押すと残りを自動補完）。"
+        if rule.yakitoriEnabled {
+            text += "ヤキトリの指定は回戦番号をタップしてください。"
+        }
+        return text
     }
 
     // MARK: キーボード補助バー
