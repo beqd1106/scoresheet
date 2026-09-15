@@ -72,6 +72,7 @@ struct ScoreSheetApp: App {
     }
 
     @AppStorage(AppSettingsKey.appearance) private var appearance: String = Appearance.system.rawValue
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
@@ -80,5 +81,17 @@ struct ScoreSheetApp: App {
                 .tint(Theme.accent)
         }
         .modelContainer(container)
+        // アプリを閉じるたびに端末内へ自動バックアップを取る（変化がなければ何もしない）。
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active { makeAutoBackup() }
+        }
+    }
+
+    /// 現在のデータを1世代ぶん書き出す。失敗しても利用の邪魔はしない。
+    private func makeAutoBackup() {
+        let context = container.mainContext
+        let players = (try? context.fetch(FetchDescriptor<Player>())) ?? []
+        let sessions = (try? context.fetch(FetchDescriptor<TableSession>())) ?? []
+        AutoBackupService.snapshotIfNeeded(players: players, sessions: sessions)
     }
 }

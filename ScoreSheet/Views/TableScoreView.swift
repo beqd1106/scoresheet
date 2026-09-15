@@ -96,7 +96,11 @@ struct TableScoreView: View {
         }
         .sheet(isPresented: $showSettings) { GameSettingsSheet(session: session) }
         .sheet(isPresented: $showRules) { RuleSettingsSheet(session: session) }
-        .onAppear(perform: loadIfNeeded)
+        .onAppear {
+            loadIfNeeded()
+            // 入力途中でアプリを閉じても、次の起動でこのゲームに戻れるようにする。
+            UserDefaults.standard.set(session.id.uuidString, forKey: AppSettingsKey.resumeSessionID)
+        }
         .onChange(of: session.ruleJSON) { _, _ in ruleCache = session.rule }
         .onChange(of: session.inputModeRaw) { _, _ in reloadFromSession() }
         .onChange(of: rows) { _, _ in if loaded { scheduleSave() } }

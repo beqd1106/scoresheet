@@ -78,6 +78,8 @@ struct HomeView: View {
         .background(NotePageBackground())
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .navigationBar)
+        // ホームまで戻ってきた＝続きから開く対象はもうない。
+        .onAppear { UserDefaults.standard.removeObject(forKey: AppSettingsKey.resumeSessionID) }
         .sheet(isPresented: $showSetup) {
             TableSetupView { session in
                 context.insert(session)

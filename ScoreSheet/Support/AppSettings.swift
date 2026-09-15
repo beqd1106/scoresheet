@@ -10,6 +10,8 @@ enum AppSettingsKey {
     static let defaultInputMode = "settings.defaultInputMode"
     /// 起動時に開けないデータベースを退避した日時（通知用・0なら未発生）。
     static let storeArchivedAt = "settings.storeArchivedAt"
+    /// 入力途中で閉じたゲームの ID。次の起動でここから再開する。
+    static let resumeSessionID = "settings.resumeSessionID"
 }
 
 enum Appearance: String, CaseIterable, Identifiable {

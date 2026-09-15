@@ -19,6 +19,7 @@ struct SettingsView: View {
     @State private var showImporter = false
     @State private var backupMessage: String?
     @State private var backupFailed = false
+    @State private var autoBackups: [AutoBackupSnapshot] = []
 
     private var defaultGameType: Binding<GameType> {
         Binding(get: { GameType(rawValue: defaultGameTypeRaw) ?? .yonma },
@@ -107,6 +108,8 @@ struct SettingsView: View {
                     }
                     Text("入力は自動保存されますが、端末の故障や機種変更に備えて時々書き出しておくと安心です。")
                         .font(AppFont.body(12)).foregroundStyle(Theme.inkFaint)
+
+                    autoBackupList
                 }
 
                 // 表現ポリシー
@@ -123,6 +126,7 @@ struct SettingsView: View {
         .background(NotePageBackground())
         .navigationTitle("設定")
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear(perform: reloadAutoBackups)
         .sheet(isPresented: $showShare) { ShareSheet(items: shareItems) }
         .fileImporter(isPresented: $showImporter,
                       allowedContentTypes: [.json],
@@ -154,6 +158,68 @@ struct SettingsView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+
+    /// 端末内に自動で残しているバックアップの一覧。
+    @ViewBuilder
+    private var autoBackupList: some View {
+        VStack(alignment: .leading, spacing: Space.sm) {
+            Text("自動バックアップ（最新\(AutoBackupService.maxGenerations)件）")
+                .font(AppFont.body(13, weight: .semibold)).foregroundStyle(Theme.inkSecond)
+                .padding(.top, Space.sm)
+
+            if autoBackups.isEmpty {
+                Text("まだありません。アプリを閉じたときに自動で作られます。")
+                    .font(AppFont.body(12)).foregroundStyle(Theme.inkFaint)
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(Array(autoBackups.enumerated()), id: \.element.id) { idx, snap in
+                        if idx > 0 { HairlineRule().padding(.leading, Space.lg) }
+                        HStack(spacing: Space.md) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(snap.date.formatted(.dateTime.month().day().hour().minute()))
+                                    .font(AppFont.body(14, weight: .medium)).foregroundStyle(Theme.ink)
+                                Text("ゲーム\(snap.sessionCount)件・プレイヤー\(snap.playerCount)人")
+                                    .font(AppFont.body(12)).foregroundStyle(Theme.inkFaint)
+                            }
+                            Spacer()
+                            Button { restoreAuto(snap) } label: {
+                                Text("復元")
+                                    .font(AppFont.body(13, weight: .semibold))
+                                    .foregroundStyle(Theme.accent)
+                                    .padding(.horizontal, Space.md).padding(.vertical, Space.sm)
+                                    .background(RoundedRectangle(cornerRadius: Radius.control)
+                                        .fill(Theme.accent.opacity(0.10)))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .padding(Space.lg)
+                    }
+                }
+                .background(RoundedRectangle(cornerRadius: Radius.card, style: .continuous).fill(Theme.card))
+                .overlay(RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
+                    .stroke(Theme.rule, lineWidth: Theme.hairline))
+
+                Text("復元しても今あるゲームは消えません。足りないものだけ戻します。")
+                    .font(AppFont.body(12)).foregroundStyle(Theme.inkFaint)
+            }
+        }
+    }
+
+    private func reloadAutoBackups() {
+        autoBackups = AutoBackupService.list()
+    }
+
+    private func restoreAuto(_ snapshot: AutoBackupSnapshot) {
+        do {
+            let summary = try AutoBackupService.restore(snapshot, into: context)
+            backupFailed = false
+            backupMessage = "復元しました：ゲーム\(summary.addedSessions)件・プレイヤー\(summary.addedPlayers)人を追加"
+                + (summary.skippedSessions > 0 ? "（重複\(summary.skippedSessions)件はそのまま）" : "")
+        } catch {
+            backupFailed = true
+            backupMessage = "復元できませんでした。"
+        }
     }
 
     private func exportBackup() {
