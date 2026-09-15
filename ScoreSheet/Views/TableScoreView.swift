@@ -29,9 +29,10 @@ struct TableScoreView: View {
     @State private var lastSavedAt: Date?
     @State private var saveFailed = false
 
-    @FocusState private var focus: FocusTarget?
+    /// 現在入力しているマス（アプリ内テンキーの対象）。
+    @State private var focus: FocusTarget?
 
-    /// 入力欄のフォーカス位置。
+    /// 入力欄の位置。
     private enum FocusTarget: Hashable {
         case cell(Int, Int)
         case chip(Int)
@@ -75,7 +76,10 @@ struct TableScoreView: View {
                 .padding(.bottom, Space.sm)
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                totalsFooter(colW: colW)
+                VStack(spacing: 0) {
+                    totalsFooter(colW: colW)
+                    if focus != nil { keypad }
+                }
             }
         }
         .background(NotePageBackground())
@@ -90,7 +94,6 @@ struct TableScoreView: View {
                     Image(systemName: "flag.checkered")
                 }
             }
-            ToolbarItemGroup(placement: .keyboard) { keyboardBar }
         }
         .sheet(isPresented: $showSettings) { GameSettingsSheet(session: session) }
         .sheet(isPresented: $showRules) { RuleSettingsSheet(session: session) }
@@ -212,58 +215,183 @@ struct TableScoreView: View {
 
     private var hintText: String {
         guard isRaw else {
-            return "各回、全員の合計が 0 になるように入力してください。1人だけ空欄でEnterを押すと自動計算します。"
+            return "マスをタップして、下のキーで入力します。各回、全員の合計が 0 になるように入力してください（1人だけ空欄なら杖のキーで自動補完）。"
         }
-        var text = "終局時の持ち点を入力すると、ウマ・オカ・罰符を含めたポイントを自動計算します。"
-        text += "全員の合計が \(session.expectedTotalScore) 点になるのが目安です（1人だけ空欄でEnterを押すと残りを自動補完）。"
-        if rule.yakitoriEnabled {
-            text += "ヤキトリの指定は回戦番号をタップしてください。"
-        }
-        return text
+        return "マスをタップして、下のキーで終局時の持ち点を入力します。"
+            + "全員の合計が \(session.expectedTotalScore) 点になるのが目安です（1人だけ空欄なら杖のキーで自動補完）。"
     }
 
-    // MARK: キーボード補助バー
+    // MARK: アプリ内テンキー
+    // システムのキーボードは使わず、この画面専用のキーを出す。
+    // 麻雀の点数は桁が多いので 00 / 000 と、隣のマスへ移る「次へ」を用意する。
 
-    @ViewBuilder
-    private var keyboardBar: some View {
-        if focus != nil {
-            Button { appendToFocused("00") } label: { Text("00").font(AppFont.number(15, weight: .bold)) }
-            Button { toggleSignOfFocused() } label: { Image(systemName: "plus.forwardslash.minus") }
-            Spacer()
-            if case .cell(let r, _)? = focus {
-                Button { autoBalance(r) } label: { Label("自動補完", systemImage: "wand.and.stars") }
-                    .font(AppFont.body(14, weight: .semibold))
+    private var keypad: some View {
+        VStack(spacing: 0) {
+            HairlineRule()
+            HStack(spacing: Space.sm) {
+                Text(focusTitle)
+                    .font(AppFont.body(13, weight: .semibold))
+                    .foregroundStyle(Theme.inkSecond)
+                    .lineLimit(1).minimumScaleFactor(0.7)
+                Spacer()
+                Button { focus = nil } label: {
+                    HStack(spacing: 4) {
+                        Text("閉じる").font(AppFont.body(14, weight: .semibold))
+                        Image(systemName: "chevron.down").font(.system(size: 11, weight: .bold))
+                    }
+                    .foregroundStyle(Theme.accent)
+                }
             }
-            Button("完了") { focus = nil }
-                .font(AppFont.body(15, weight: .semibold))
+            .padding(.horizontal, Space.lg)
+            .padding(.vertical, Space.sm)
+
+            HStack(spacing: Space.xs) {
+                // 数字（3列）
+                VStack(spacing: Space.xs) {
+                    ForEach(digitRows, id: \.self) { row in
+                        HStack(spacing: Space.xs) {
+                            ForEach(row, id: \.self) { key in
+                                keyButton(label: key, tint: Theme.ink) { append(key) }
+                            }
+                        }
+                    }
+                }
+                // 補助（1列）
+                VStack(spacing: Space.xs) {
+                    keyButton(systemImage: "delete.left", tint: Theme.inkSecond) { backspace() }
+                    keyButton(systemImage: "plus.forwardslash.minus", tint: Theme.inkSecond) { toggleSign() }
+                    keyButton(systemImage: "wand.and.stars", tint: Theme.accent) { autoBalanceFocused() }
+                    keyButton(label: "次へ", tint: .white, background: Theme.accent) { moveNext() }
+                }
+                .frame(width: 78)
+            }
+            .padding(.horizontal, Space.sm)
+            .padding(.top, Space.xs)
+            .padding(.bottom, Space.sm)
+        }
+        .background(Theme.sunken)
+    }
+
+    private var digitRows: [[String]] {
+        [["7", "8", "9"], ["4", "5", "6"], ["1", "2", "3"], ["0", "00", "000"]]
+    }
+
+    /// いま入力しているマスの見出し（例：2回戦　たろう　持ち点）。
+    private var focusTitle: String {
+        switch focus {
+        case .cell(let r, let c)?:
+            let name = c < n ? participants[c].name : ""
+            return "\(r + 1)回戦　\(name)　" + (isRaw ? "持ち点" : "ポイント")
+        case .chip(let c)?:
+            let name = c < n ? participants[c].name : ""
+            return "チップ　\(name)"
+        case nil:
+            return ""
         }
     }
 
-    private func appendToFocused(_ suffix: String) {
+    private func keyButton(label: String,
+                           tint: Color,
+                           background: Color = Theme.card,
+                           action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(label)
+                .font(AppFont.number(label.count > 2 ? 17 : 20, weight: .semibold))
+                .foregroundStyle(tint)
+                .frame(maxWidth: .infinity)
+                .frame(height: 46)
+                .background(RoundedRectangle(cornerRadius: Radius.control, style: .continuous).fill(background))
+                .overlay(RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
+                    .stroke(Theme.rule, lineWidth: Theme.hairline))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func keyButton(systemImage: String,
+                           tint: Color,
+                           action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(tint)
+                .frame(maxWidth: .infinity)
+                .frame(height: 46)
+                .background(RoundedRectangle(cornerRadius: Radius.control, style: .continuous).fill(Theme.card))
+                .overlay(RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
+                    .stroke(Theme.rule, lineWidth: Theme.hairline))
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: テンキーの操作
+
+    /// 入力できる桁数。素点は 6 桁（-12300 など）、ポイントは 5 桁まで。
+    private var maxDigits: Int { isRaw ? 6 : 5 }
+
+    private func currentText() -> String {
+        switch focus {
+        case .cell(let r, let c)?:
+            return r < rows.count && c < rows[r].count ? rows[r][c] : ""
+        case .chip(let c)?:
+            return c < chipText.count ? chipText[c] : ""
+        case nil:
+            return ""
+        }
+    }
+
+    private func setCurrentText(_ text: String) {
         switch focus {
         case .cell(let r, let c)?:
             guard r < rows.count, c < rows[r].count else { return }
-            guard !rows[r][c].isEmpty, rows[r][c] != "-" else { return }
-            rows[r][c] = filter(rows[r][c] + suffix)
+            rows[r][c] = text
         case .chip(let c)?:
-            guard c < chipText.count, !chipText[c].isEmpty, chipText[c] != "-" else { return }
-            chipText[c] = filter(chipText[c] + suffix)
+            guard c < chipText.count else { return }
+            chipText[c] = text
         case nil:
             break
         }
     }
 
-    private func toggleSignOfFocused() {
-        func flipped(_ s: String) -> String {
-            s.hasPrefix("-") ? String(s.dropFirst()) : (s.isEmpty ? "-" : "-" + s)
+    private func append(_ key: String) {
+        let text = currentText()
+        // 「0」だけの状態で数字を押したら置き換える（0 の連なりを防ぐ）。
+        let base = text.filter { $0.isNumber } == "0" ? text.replacingOccurrences(of: "0", with: "") : text
+        guard base.filter({ $0.isNumber }).count + key.count <= maxDigits else { return }
+        setCurrentText(filter(base + key))
+    }
+
+    private func backspace() {
+        let text = currentText()
+        guard !text.isEmpty else { return }
+        setCurrentText(String(text.dropLast()))
+    }
+
+    private func toggleSign() {
+        let text = currentText()
+        setCurrentText(text.hasPrefix("-") ? String(text.dropFirst()) : "-" + text)
+    }
+
+    private func autoBalanceFocused() {
+        switch focus {
+        case .cell(let r, _)?: autoBalance(r)
+        case .chip?:           autoBalanceChips()
+        case nil:              break
         }
+    }
+
+    /// 次のマスへ。行の右端まで行ったら次の回戦へ、最後はチップ行へ移る。
+    private func moveNext() {
         switch focus {
         case .cell(let r, let c)?:
-            guard r < rows.count, c < rows[r].count else { return }
-            rows[r][c] = flipped(rows[r][c])
+            if c + 1 < n {
+                focus = .cell(r, c + 1)
+            } else if r + 1 < rows.count {
+                focus = .cell(r + 1, 0)
+            } else {
+                focus = .chip(0)
+            }
         case .chip(let c)?:
-            guard c < chipText.count else { return }
-            chipText[c] = flipped(chipText[c])
+            focus = c + 1 < n ? .chip(c + 1) : nil
         case nil:
             break
         }
@@ -396,14 +524,12 @@ struct TableScoreView: View {
     private func cellContent(_ r: Int, _ c: Int, settlement: RoundSettlement?) -> some View {
         if isRaw {
             VStack(spacing: 1) {
-                TextField("", text: cellBinding(r, c))
-                    .keyboardType(.numbersAndPunctuation)
-                    .multilineTextAlignment(.center)
-                    .font(AppFont.number(15, weight: .semibold))
-                    .foregroundStyle(Theme.ink)
-                    .focused($focus, equals: .cell(r, c))
-                    .submitLabel(.done)
-                    .onSubmit { autoBalance(r) }
+                inputCell(text: cellText(r, c),
+                          selected: focus == .cell(r, c),
+                          size: 15,
+                          color: Theme.ink,
+                          height: 28)
+                    .onTapGesture { focus = .cell(r, c) }
                 HStack(spacing: 3) {
                     if isYakitori(r, c) && rule.yakitoriEnabled {
                         Text("焼").font(AppFont.body(9, weight: .bold)).foregroundStyle(Theme.accentYellow)
@@ -429,15 +555,12 @@ struct TableScoreView: View {
             }
             .padding(.vertical, 4)
         } else {
-            TextField("", text: cellBinding(r, c))
-                .keyboardType(.numbersAndPunctuation)
-                .multilineTextAlignment(.center)
-                .font(AppFont.number(17, weight: .semibold))
-                .foregroundStyle(Theme.pointColor(cellValue(r, c)))
-                .frame(maxWidth: .infinity)
-                .focused($focus, equals: .cell(r, c))
-                .submitLabel(.done)
-                .onSubmit { autoBalance(r) }
+            inputCell(text: cellText(r, c),
+                      selected: focus == .cell(r, c),
+                      size: 17,
+                      color: Theme.pointColor(cellValue(r, c)),
+                      height: rowH - 8)
+                .onTapGesture { focus = .cell(r, c) }
         }
     }
 
@@ -504,14 +627,13 @@ struct TableScoreView: View {
                 }
                 ForEach(Array(participants.enumerated()), id: \.element.id) { idx, _ in
                     gridCell(width: colW, height: 44, showRight: idx < n - 1) {
-                        TextField("0", text: chipBinding(idx))
-                            .keyboardType(.numbersAndPunctuation)
-                            .multilineTextAlignment(.center)
-                            .font(AppFont.number(15, weight: .semibold))
-                            .foregroundStyle(Theme.pointColor(chipCount(idx)))
-                            .focused($focus, equals: .chip(idx))
-                            .submitLabel(.done)
-                            .onSubmit { autoBalanceChips() }
+                        inputCell(text: idx < chipText.count ? chipText[idx] : "",
+                                  selected: focus == .chip(idx),
+                                  size: 15,
+                                  color: Theme.pointColor(chipCount(idx)),
+                                  height: 36,
+                                  placeholder: "0")
+                            .onTapGesture { focus = .chip(idx) }
                     }
                 }
             }
@@ -560,17 +682,34 @@ struct TableScoreView: View {
 
     // MARK: バインディング・計算
 
-    private func cellBinding(_ r: Int, _ c: Int) -> Binding<String> {
-        Binding(
-            get: { r < rows.count && c < rows[r].count ? rows[r][c] : "" },
-            set: { if r < rows.count && c < rows[r].count { rows[r][c] = filter($0) } }
-        )
+    private func cellText(_ r: Int, _ c: Int) -> String {
+        r < rows.count && c < rows[r].count ? rows[r][c] : ""
     }
-    private func chipBinding(_ c: Int) -> Binding<String> {
-        Binding(
-            get: { c < chipText.count ? chipText[c] : "" },
-            set: { if c < chipText.count { chipText[c] = filter($0) } }
-        )
+
+    /// 入力マス。タップで選択し、アプリ内テンキーから入力する。
+    /// 選択中は枠と薄い塗りで、どこを打っているかが分かるようにする。
+    private func inputCell(text: String,
+                           selected: Bool,
+                           size: CGFloat,
+                           color: Color,
+                           height: CGFloat,
+                           placeholder: String = "") -> some View {
+        Text(text.isEmpty ? placeholder : text)
+            .font(AppFont.number(size, weight: .semibold))
+            .foregroundStyle(text.isEmpty ? Theme.inkFaint : color)
+            .lineLimit(1).minimumScaleFactor(0.6)
+            .frame(maxWidth: .infinity)
+            .frame(height: height)
+            .background(
+                RoundedRectangle(cornerRadius: Radius.small, style: .continuous)
+                    .fill(selected ? Theme.accent.opacity(0.12) : Color.clear)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: Radius.small, style: .continuous)
+                    .stroke(selected ? Theme.accent : Color.clear, lineWidth: 1.5)
+            )
+            .padding(.horizontal, 3)
+            .contentShape(Rectangle())
     }
     /// 先頭のマイナス1つ＋数字のみ許可。
     private func filter(_ s: String) -> String {
