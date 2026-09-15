@@ -121,7 +121,9 @@ struct GameRule: Codable, Equatable {
     var yakitoriEnabled: Bool = false
     var yakitoriPenalty: Int = 20
     var yakitoriPayee: PenaltyPayee = .others
-    var yakitoriUnit: PenaltyUnit = .pot
+    // ヤキトリは「受け取る人それぞれに満額」が既定。
+    // 例）20pt で該当1人・回避2人なら、該当者は 40pt を払い、2人が 20pt ずつ受け取る。
+    var yakitoriUnit: PenaltyUnit = .perPerson
 
     // MARK: クビ（基準点に届かない人・または最下位の罰符）
     var kubiEnabled: Bool = false

@@ -60,6 +60,14 @@ final class YakitoriPaymentTests: XCTestCase {
         XCTAssertEqual(penalties(flags: [false, false, false], unit: .pot), [0, 0, 0])
     }
 
+    // MARK: 既定値
+
+    func testDefaultYakitoriUnitIsPerPerson() {
+        let rule = GameRule.standard(for: .yonma)
+        XCTAssertEqual(rule.yakitoriUnit, .perPerson)   // 何も触らなければ「人に払う」
+        XCTAssertEqual(rule.yakitoriPayee, .others)
+    }
+
     // MARK: 四麻でも同じ考え方
 
     func testYonmaPerPersonPaysEveryoneElse() {

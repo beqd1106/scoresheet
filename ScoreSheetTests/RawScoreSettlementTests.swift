@@ -132,6 +132,7 @@ final class RawScoreSettlementTests: XCTestCase {
         rule.yakitoriEnabled = true
         rule.yakitoriPenalty = 20
         rule.yakitoriPayee = .others
+        rule.yakitoriUnit = .pot          // 既定は「人に払う」なので、ここは明示的に場に払う
         let s = ScoreCalculator.settle(participantIDs: ids(4),
                                        rawScores: [40000, 30000, 20000, 10000],
                                        yakitoriFlags: [false, false, false, true],
@@ -241,7 +242,7 @@ final class RawScoreSettlementTests: XCTestCase {
         XCTAssertEqual(rule.tobiPenalty, 30)
         XCTAssertTrue(rule.tobiIncludesZero)
         XCTAssertTrue(rule.yakitoriEnabled)
-        XCTAssertEqual(rule.yakitoriUnit, .pot)     // 無いキーは既定値で補う
+        XCTAssertEqual(rule.yakitoriUnit, .perPerson)   // 無いキーは既定値で補う
         XCTAssertEqual(rule.tobiUnit, .pot)
     }
 
