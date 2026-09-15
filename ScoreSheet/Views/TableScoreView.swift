@@ -25,7 +25,6 @@ struct TableScoreView: View {
     @State private var ruleCache: GameRule?
 
     // 自動保存
-    @State private var saveTask: Task<Void, Never>?
     @State private var lastSavedAt: Date?
     @State private var saveFailed = false
 
@@ -588,16 +587,10 @@ struct TableScoreView: View {
     /// その回戦の精算結果。素点が全員そろっていて合計が合うときだけ算出する。
     private func settlements(for r: Int) -> [RoundSettlement]? {
         guard isRaw, r < rows.count else { return nil }
-        let values = rows[r].map { Int($0) }
-        guard ScoreCalculator.isRawRoundComplete(values) else { return nil }
-        let scores = values.compactMap { $0 }
-        guard scores.count == n else { return nil }
-        guard ScoreCalculator.isRawRoundBalanced(scores, rule: rule, playerCount: n) else { return nil }
-        return ScoreCalculator.settle(participantIDs: participants.map(\.id),
-                                      rawScores: scores,
-                                      yakitoriFlags: yakitoriRow(r),
-                                      busterIDs: busterRow(r),
-                                      rule: rule)
+        return RoundPersistence.settlement(row: rows[r],
+                                           yakitori: yakitoriRow(r),
+                                           busters: busterRow(r),
+                                           session: session)
     }
 
     /// その回戦・そのプレイヤーの確定ポイント（未確定なら 0）。
@@ -892,37 +885,11 @@ struct TableScoreView: View {
 
     private func loadIfNeeded() {
         guard !loaded else { return }
-        let sorted = session.sortedRounds
-        rows = sorted.map { round in
-            participants.map { p in
-                guard let entry = round.points.first(where: { $0.participantID == p.id }) else { return "" }
-                if isRaw {
-                    guard let raw = entry.rawScore else { return "" }
-                    return "\(raw)"
-                }
-                return "\(entry.point)"
-            }
-        }
-        yakitori = sorted.map { round in
-            participants.map { p in
-                round.points.first { $0.participantID == p.id }?.isYakitori ?? false
-            }
-        }
-        busters = sorted.map { round in
-            participants.map { p in
-                round.points.first { $0.participantID == p.id }?.busterID
-            }
-        }
-        if rows.isEmpty {
-            rows = [Array(repeating: "", count: n)]   // 最初の1回戦
-            yakitori = [Array(repeating: false, count: n)]
-            busters = [Array(repeating: nil, count: n)]
-        }
-        chipText = participants.map { p in
-            let c = session.chipCount(for: p.id)
-            return session.chips.contains { $0.participantID == p.id } && c != 0 ? "\(c)" : ""
-        }
-        if chipText.count != n { chipText = Array(repeating: "", count: n) }
+        let input = RoundPersistence.load(from: session)
+        rows = input.rows
+        yakitori = input.yakitori
+        busters = input.busters
+        chipText = input.chips
         ruleCache = session.rule
         loaded = true
     }
@@ -975,91 +942,32 @@ struct TableScoreView: View {
 
     // MARK: 自動保存
 
-    /// 入力のたびに走らせると重いので、少し待ってからまとめて保存する。
+    /// 入力のたびにすぐ保存する。
+    /// キーは1タップずつの操作で書き込みも軽いため、待ち時間を置かずに保存して
+    /// 万一アプリが落ちても直前の操作が残るようにしている。
     private func scheduleSave() {
-        saveTask?.cancel()
-        saveTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 500_000_000)
-            guard !Task.isCancelled else { return }
-            persist()
-        }
+        persist()
     }
 
-    /// 待たずに保存（画面離脱・バックグラウンド移行時）。
+    /// 画面を離れる・バックグラウンドへ移るときの保存。
     private func saveNow() {
-        saveTask?.cancel()
-        saveTask = nil
         guard loaded else { return }
         persist()
     }
 
     /// @State の内容を session へ反映して保存する。
-    /// 回戦は作り直さず既存レコードを更新する（毎入力での削除・再作成を避けるため）。
     private func persist() {
-        let existing = session.sortedRounds
-
-        for (i, row) in rows.enumerated() {
-            let points = buildPoints(i, row)
-            if i < existing.count {
-                let round = existing[i]
-                if round.roundNumber != i + 1 { round.roundNumber = i + 1 }
-                if round.points != points { round.points = points }
-            } else {
-                let rr = RoundResult(roundNumber: i + 1, points: points)
-                rr.session = session
-                session.rounds.append(rr)
-                context.insert(rr)
-            }
-        }
-
-        // 行が減った分は削除する。
-        if existing.count > rows.count {
-            for extra in existing[rows.count...] {
-                session.rounds.removeAll { $0.id == extra.id }
-                context.delete(extra)
-            }
-        }
-
-        session.chips = participants.enumerated().map { idx, p in
-            ChipEntry(participantID: p.id, chipCount: chipCount(idx))
-        }
-        session.updatedAt = Date()
-
-        do {
-            try context.save()
+        let ok = RoundPersistence.save(currentInput, to: session, context: context)
+        if ok {
             lastSavedAt = Date()
             saveFailed = false
-        } catch {
+        } else {
             saveFailed = true
         }
     }
 
-    /// 入力行から保存用の PlayerRoundPoint を構築する。
-    /// 素点モードは算出ポイントと素点の両方を、ポイントモードは従来どおり入力値を保存する。
-    private func buildPoints(_ r: Int, _ row: [String]) -> [PlayerRoundPoint] {
-        if isRaw {
-            let settled = settlements(for: r)
-            return participants.indices.map { i in
-                let raw = i < row.count ? Int(row[i]) : nil
-                let s = settled?[safe: i]
-                return PlayerRoundPoint(participantID: participants[i].id,
-                                        rank: s?.rank ?? 0,
-                                        point: s?.total ?? 0,
-                                        isAutoCalculated: s != nil,
-                                        rawScore: raw,
-                                        isYakitori: isYakitori(r, i),
-                                        busterID: busterAt(r, i))
-            }
-        }
-
-        let vals = (0..<n).map { c -> Int in c < row.count ? (Int(row[c]) ?? 0) : 0 }
-        let order = vals.indices.sorted { vals[$0] > vals[$1] }
-        var rankOf = Array(repeating: 0, count: n)
-        for (pos, idx) in order.enumerated() { rankOf[idx] = pos + 1 }
-        return participants.indices.map { i in
-            PlayerRoundPoint(participantID: participants[i].id,
-                             rank: rankOf[i], point: vals[i], isAutoCalculated: false)
-        }
+    private var currentInput: ScoreTableInput {
+        ScoreTableInput(rows: rows, yakitori: yakitori, busters: busters, chips: chipText)
     }
 }
 

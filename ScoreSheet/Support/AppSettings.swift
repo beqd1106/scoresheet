@@ -8,6 +8,8 @@ enum AppSettingsKey {
     static let quickPoints = "settings.quickPoints"        // カンマ区切り "5,10,15,20,30"
     static let appearance = "settings.appearance"
     static let defaultInputMode = "settings.defaultInputMode"
+    /// 起動時に開けないデータベースを退避した日時（通知用・0なら未発生）。
+    static let storeArchivedAt = "settings.storeArchivedAt"
 }
 
 enum Appearance: String, CaseIterable, Identifiable {

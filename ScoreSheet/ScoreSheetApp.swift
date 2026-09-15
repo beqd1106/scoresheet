@@ -51,12 +51,23 @@ struct ScoreSheetApp: App {
         ) else { return }
 
         let stamp = Int(Date().timeIntervalSince1970)
+        var archived = false
         // SwiftData は default.store と付随する -shm / -wal を作る
         for name in ["default.store", "default.store-shm", "default.store-wal"] {
             let src = dir.appendingPathComponent(name)
             guard fm.fileExists(atPath: src.path) else { continue }
             let dst = dir.appendingPathComponent("\(name).bak-\(stamp)")
-            try? fm.moveItem(at: src, to: dst)
+            do {
+                try fm.moveItem(at: src, to: dst)
+                archived = true
+            } catch {
+                continue
+            }
+        }
+        // 退避した＝アプリ上はデータが空に見える。画面で知らせるため記録しておく。
+        if archived {
+            UserDefaults.standard.set(Date().timeIntervalSince1970,
+                                      forKey: AppSettingsKey.storeArchivedAt)
         }
     }
 

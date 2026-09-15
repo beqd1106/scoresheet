@@ -8,6 +8,7 @@ struct HomeView: View {
 
     @State private var showSetup = false
     @State private var toDelete: TableSession? = nil
+    @AppStorage(AppSettingsKey.storeArchivedAt) private var storeArchivedAt: Double = 0
     private let vm = HomeViewModel()
 
     private var recent: [TableSession] { Array(sessions.prefix(3)) }
@@ -26,6 +27,9 @@ struct HomeView: View {
                         .foregroundStyle(Theme.inkSecond)
                 }
                 .padding(.top, Space.sm)
+
+                // データベースを作り直したときの案内
+                storeArchivedNotice
 
                 // 新規ゲーム（主役）
                 Button { showSetup = true } label: {
@@ -91,6 +95,53 @@ struct HomeView: View {
             }
             Button("キャンセル", role: .cancel) { toDelete = nil }
         }
+    }
+
+    /// 保存データが開けず作り直したときに出す案内。
+    /// 黙って空の状態で始まると「消えた」ように見えるため、復元への導線を示す。
+    @ViewBuilder
+    private var storeArchivedNotice: some View {
+        if storeArchivedAt > 0 {
+            NoteCard(padding: Space.lg) {
+                VStack(alignment: .leading, spacing: Space.md) {
+                    HStack(spacing: Space.sm) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 15))
+                            .foregroundStyle(Theme.accentYellow)
+                        Text("保存データを読み込めませんでした")
+                            .font(AppFont.body(15, weight: .semibold))
+                            .foregroundStyle(Theme.ink)
+                    }
+                    Text(archivedNoticeText)
+                        .font(AppFont.body(13))
+                        .foregroundStyle(Theme.inkSecond)
+                    HStack(spacing: Space.md) {
+                        NavigationLink(value: HomeRoute.settings) {
+                            Text("バックアップから復元")
+                                .font(AppFont.body(14, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, Space.lg).padding(.vertical, Space.sm)
+                                .background(RoundedRectangle(cornerRadius: Radius.control).fill(Theme.accent))
+                        }
+                        .buttonStyle(.plain)
+                        Button { storeArchivedAt = 0 } label: {
+                            Text("閉じる")
+                                .font(AppFont.body(14, weight: .semibold))
+                                .foregroundStyle(Theme.inkSecond)
+                                .padding(.horizontal, Space.lg).padding(.vertical, Space.sm)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+    }
+
+    private var archivedNoticeText: String {
+        let when = Date(timeIntervalSince1970: storeArchivedAt)
+            .formatted(.dateTime.year().month().day().hour().minute())
+        return "\(when)に、開けなくなった保存データを端末内へ退避して、新しく作り直しました。"
+            + "以前のゲームは表示されませんが、バックアップを書き出してあれば設定から復元できます。"
     }
 
     private func indexRow(icon: String, title: String, route: HomeRoute) -> some View {
