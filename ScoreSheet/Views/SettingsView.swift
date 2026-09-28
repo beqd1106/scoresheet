@@ -17,6 +17,9 @@ struct SettingsView: View {
     @State private var shareItems: [Any] = []
     @State private var showShare = false
     @State private var showImporter = false
+    /// ファイル選択の用途（1つの fileImporter を使い回す。複数付けると片方しか動かないため）。
+    @State private var importKind: ImportKind = .backup
+    @State private var csvPreview: CSVImportPreview?
     @State private var backupMessage: String?
     @State private var backupFailed = false
     @State private var autoBackups: [AutoBackupSnapshot] = []
@@ -94,6 +97,13 @@ struct SettingsView: View {
                         HairlineRule().padding(.leading, 44)
                         dataRow(icon: "square.and.arrow.down", title: "バックアップから復元",
                                 detail: "同じゲームは重複せず、足りない分だけ追加します") {
+                            importKind = .backup
+                            showImporter = true
+                        }
+                        HairlineRule().padding(.leading, 44)
+                        dataRow(icon: "tablecells", title: "他アプリのCSVを取り込む",
+                                detail: "麻雀スコアアプリの成績CSV（点数・スコア・チップ列）に対応") {
+                            importKind = .csv
                             showImporter = true
                         }
                     }
@@ -129,9 +139,19 @@ struct SettingsView: View {
         .onAppear(perform: reloadAutoBackups)
         .sheet(isPresented: $showShare) { ShareSheet(items: shareItems) }
         .fileImporter(isPresented: $showImporter,
-                      allowedContentTypes: [.json],
+                      allowedContentTypes: importKind == .csv
+                        ? [.commaSeparatedText, .plainText, .text]
+                        : [.json],
                       allowsMultipleSelection: false) { result in
-            handleImport(result)
+            switch importKind {
+            case .backup: handleImport(result)
+            case .csv:    handleCSVSelection(result)
+            }
+        }
+        .sheet(item: $csvPreview) { preview in
+            CSVImportSheet(preview: preview) { tag in
+                applyCSV(preview, tag: tag)
+            }
         }
     }
 
@@ -253,6 +273,37 @@ struct SettingsView: View {
         }
     }
 
+    private func handleCSVSelection(_ result: Result<[URL], Error>) {
+        do {
+            guard let url = try result.get().first else { return }
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            let data = try Data(contentsOf: url)
+            csvPreview = try CSVImportService.parse(data)
+            backupMessage = nil
+        } catch let error as CSVImportError {
+            backupFailed = true
+            backupMessage = error.errorDescription
+        } catch {
+            backupFailed = true
+            backupMessage = "ファイルを開けませんでした。"
+        }
+    }
+
+    private func applyCSV(_ preview: CSVImportPreview, tag: String) {
+        do {
+            let summary = try CSVImportService.apply(preview, tag: tag, into: context)
+            backupFailed = false
+            backupMessage = "取り込みました：ゲーム\(summary.addedSessions)件"
+                + (summary.addedPlayers > 0 ? "・新しいプレイヤー\(summary.addedPlayers)人" : "")
+                + (summary.skippedDuplicates > 0 ? "（取り込み済みの\(summary.skippedDuplicates)件は飛ばしました）" : "")
+        } catch {
+            backupFailed = true
+            backupMessage = "取り込みに失敗しました。もう一度お試しください。"
+        }
+        csvPreview = nil
+    }
+
     private func coeffRow(_ title: String, _ value: Binding<Double>, _ step: Double, _ maxV: Double) -> some View {
         HStack {
             Text(title).font(AppFont.body(15)).foregroundStyle(Theme.ink)
@@ -264,3 +315,6 @@ struct SettingsView: View {
         }
     }
 }
+
+/// 設定画面のファイル選択の用途。
+private enum ImportKind { case backup, csv }

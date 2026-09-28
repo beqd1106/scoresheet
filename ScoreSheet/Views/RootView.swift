@@ -7,6 +7,7 @@ enum HomeRoute: Hashable {
     case players
     case settings
     case tags
+    case playerStats
 }
 
 struct RootView: View {
@@ -30,6 +31,7 @@ struct RootView: View {
                     case .players:  PlayerListView()
                     case .settings: SettingsView()
                     case .tags:     TagListView(path: $path)
+                    case .playerStats: PlayerStatsListView()
                     }
                 }
         }

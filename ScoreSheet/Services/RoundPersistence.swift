@@ -144,10 +144,21 @@ enum RoundPersistence {
 
         let existing = session.sortedRounds
         for (i, row) in input.rows.enumerated() {
-            let pts = points(row: row,
+            var pts = points(row: row,
                              yakitori: input.yakitori[i],
                              busters: input.busters[i],
                              session: session)
+            // ポイント入力でも、CSV取り込みなどで素点を持っている回戦がある。
+            // ポイントが変わっていない人の素点は消さずに残す（トビ率などの集計に使うため）。
+            if session.inputMode == .point, i < existing.count {
+                let old = existing[i].points
+                for k in pts.indices {
+                    if let prev = old.first(where: { $0.participantID == pts[k].participantID }),
+                       prev.point == pts[k].point {
+                        pts[k].rawScore = prev.rawScore
+                    }
+                }
+            }
             if i < existing.count {
                 let round = existing[i]
                 if round.roundNumber != i + 1 { round.roundNumber = i + 1 }

@@ -26,6 +26,15 @@ final class RoundResult {
     var pointSum: Int { points.reduce(0) { $0 + $1.point } }
     var isBalanced: Bool { pointSum == 0 }
 
+    /// 成績の集計に数える回戦か。
+    /// 全員分の順位がそろい、かつ「全員0点の空行」でないものだけを数える
+    /// （表の末尾の未入力行や、素点が途中までの回戦を順位集計に混ぜないため）。
+    func isCounted(playerCount: Int) -> Bool {
+        guard points.count == playerCount, points.allSatisfy({ $0.rank > 0 }) else { return false }
+        let empty = points.allSatisfy { $0.point == 0 && ($0.rawScore ?? 0) == 0 }
+        return !empty
+    }
+
     /// 指定プレイヤーのこの回のポイント。
     func point(for participantID: UUID) -> Int {
         points.first { $0.participantID == participantID }?.point ?? 0

@@ -189,7 +189,7 @@ enum ScoreCalculator {
             let chipCount = session.chipCount(for: p.id)
             let chipTotal = chipPoint(count: chipCount, coefficient: coeff)
 
-            let ranks: [Int] = session.rounds.compactMap { $0.rank(for: p.id) }
+            let ranks: [Int] = countedRounds(session).compactMap { $0.rank(for: p.id) }
             let topCount = ranks.filter { $0 == 1 }.count
             let avgRank = ranks.isEmpty ? 0 : Double(ranks.reduce(0, +)) / Double(ranks.count)
 
@@ -218,6 +218,11 @@ enum ScoreCalculator {
         return partials
     }
 
+    /// 順位の集計に数える回戦（空行・入力途中を除く）。
+    static func countedRounds(_ session: TableSession) -> [RoundResult] {
+        session.rounds.filter { $0.isCounted(playerCount: session.participants.count) }
+    }
+
     // MARK: - 推移グラフ用
 
     /// 回戦ごとの累計ポイント（対局のみ・チップ除く）を各プレイヤー分。
@@ -243,7 +248,7 @@ enum ScoreCalculator {
         var dist: [UUID: [Int: Int]] = [:]
         for p in session.participants {
             var counts: [Int: Int] = [:]
-            for r in session.rounds {
+            for r in countedRounds(session) {
                 if let rank = r.rank(for: p.id) { counts[rank, default: 0] += 1 }
             }
             dist[p.id] = counts

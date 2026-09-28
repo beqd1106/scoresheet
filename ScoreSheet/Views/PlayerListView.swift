@@ -69,6 +69,12 @@ struct PlayerListView: View {
                 .overlay(Image(systemName: "person.fill").font(.system(size: 12)).foregroundStyle(.white))
             Text(player.name).font(AppFont.body(16)).foregroundStyle(Theme.ink)
             Spacer()
+            NavigationLink {
+                PlayerStatsDetailView(playerID: player.id, initialFilter: StatsFilter())
+            } label: {
+                Image(systemName: "chart.bar.xaxis").foregroundStyle(Theme.mutedBlue)
+            }
+            .accessibilityLabel("\(player.name)の成績")
             Button { editingPlayer = player } label: {
                 Image(systemName: "pencil").foregroundStyle(Theme.mutedBlue)
             }

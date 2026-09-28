@@ -44,6 +44,8 @@ struct HomeView: View {
                 VStack(spacing: 0) {
                     indexRow(icon: "clock.arrow.circlepath", title: "過去のゲーム", route: .history)
                     HairlineRule().padding(.leading, 44)
+                    indexRow(icon: "chart.bar.xaxis", title: "プレイヤー別成績", route: .playerStats)
+                    HairlineRule().padding(.leading, 44)
                     indexRow(icon: "tag", title: "タグ別成績", route: .tags)
                     HairlineRule().padding(.leading, 44)
                     indexRow(icon: "person.2", title: "プレイヤー", route: .players)
