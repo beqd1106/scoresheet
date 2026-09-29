@@ -36,7 +36,7 @@ struct RootView: View {
                 }
         }
         .task {
-            SampleDataService.seedIfNeeded(context)
+            SampleDataService.removeLegacySamplesIfNeeded(context)
             resumeIfNeeded()
         }
     }

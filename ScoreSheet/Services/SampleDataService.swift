@@ -1,25 +1,48 @@
 import Foundation
 import SwiftData
 
-/// サンプルデータ生成（初回起動やプレビュー用）。三麻・四麻を1卓ずつ作る。
+/// サンプルデータ。以前は初回起動時に投入していたが、1.2.0 から投入をやめた。
+/// 卓の生成関数はテストで使うので残している。
 enum SampleDataService {
 
-    /// 名簿が空なら、サンプルのプレイヤーと卓を投入する。
-    static func seedIfNeeded(_ context: ModelContext) {
-        let playerCount = (try? context.fetch(FetchDescriptor<Player>()))?.count ?? 0
-        let sessionCount = (try? context.fetch(FetchDescriptor<TableSession>()))?.count ?? 0
-        guard playerCount == 0 && sessionCount == 0 else { return }
+    static let legacySampleMemos: Set<String> = ["四麻サンプル", "三麻サンプル"]
+    static let legacySampleNames: Set<String> = ["あきら", "ばんり", "ちひろ", "だいご"]
+    static let legacyCleanupKey = "didRemoveLegacySamples"
 
-        let a = Player(name: "あきら", colorHex: Theme.playerPalette[0])
-        let b = Player(name: "ばんり", colorHex: Theme.playerPalette[1])
-        let c = Player(name: "ちひろ", colorHex: Theme.playerPalette[2])
-        let d = Player(name: "だいご", colorHex: Theme.playerPalette[3])
-        [a, b, c, d].forEach { context.insert($0) }
+    /// 以前のバージョンが入れたサンプルの卓と名簿を一度だけ取り除く。
+    /// 回戦を足したり参加者を変えた卓、ほかの卓でも使っている名簿は利用者のデータとみなして残す。
+    static func removeLegacySamplesIfNeeded(_ context: ModelContext, defaults: UserDefaults = .standard) {
+        guard !defaults.bool(forKey: legacyCleanupKey) else { return }
 
-        context.insert(makeYonmaSample(a, b, c, d))
-        context.insert(makeSanmaSample(a, b, c))
+        let sessions = (try? context.fetch(FetchDescriptor<TableSession>())) ?? []
+        let samples = sessions.filter(isUntouchedSample)
+        let sampleParticipantIDs = Set(samples.flatMap { $0.participants.map(\.id) })
+        let usedElsewhere = Set(sessions.filter { s in !samples.contains { $0 === s } }
+            .flatMap { $0.participants.map(\.id) })
 
-        try? context.save()
+        samples.forEach { context.delete($0) }
+        let players = (try? context.fetch(FetchDescriptor<Player>())) ?? []
+        for player in players
+        where sampleParticipantIDs.contains(player.id) && !usedElsewhere.contains(player.id)
+            && legacySampleNames.contains(player.name) {
+            context.delete(player)
+        }
+
+        do {
+            try context.save()
+            defaults.set(true, forKey: legacyCleanupKey)
+        } catch {
+            // 保存できなかったときは次回起動でもう一度試す
+            context.rollback()
+        }
+    }
+
+    private static func isUntouchedSample(_ session: TableSession) -> Bool {
+        let expectedCount = session.gameType == .yonma ? 4 : 3
+        return legacySampleMemos.contains(session.memo)
+            && session.rounds.count == 3
+            && session.participants.count == expectedCount
+            && session.participants.allSatisfy { legacySampleNames.contains($0.name) }
     }
 
     // MARK: 四麻サンプル（3回戦 + チップ）
