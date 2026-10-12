@@ -39,7 +39,19 @@ final class LiveShareTests: XCTestCase {
         let snap = LiveSnapshot(session: makeHostSnapshot(), sentAt: Date(timeIntervalSince1970: 1_800_000_000))
         let decoded = try LiveWire.decode(LiveWire.encode(.snapshot(snap)))
         guard case .snapshot(let got) = decoded else { return XCTFail("snapshot ではない") }
-        XCTAssertEqual(got, snap)
+        // 日時は送るときに秒単位へ丸まるので、日時以外の中身が落ちないことを確かめる。
+        XCTAssertEqual(got.sentAt, snap.sentAt)
+        XCTAssertEqual(got.session.id, snap.session.id)
+        XCTAssertEqual(got.session.participants, snap.session.participants)
+        XCTAssertEqual(got.session.chips, snap.session.chips)
+        XCTAssertEqual(got.session.ruleJSON, snap.session.ruleJSON)
+        XCTAssertEqual(got.session.inputModeRaw, snap.session.inputModeRaw)
+        XCTAssertEqual(got.session.rounds.map(\.points), snap.session.rounds.map(\.points))
+        // 受け取った内容をもう一度送っても変わらない（「保存済み」の判定に使う比較が安定する）
+        guard case .snapshot(let again) = try LiveWire.decode(LiveWire.encode(.snapshot(got))) else {
+            return XCTFail("snapshot ではない")
+        }
+        XCTAssertEqual(again, got)
     }
 
     func testEndedMessageRoundTrip() throws {
