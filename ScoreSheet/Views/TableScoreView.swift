@@ -11,6 +11,7 @@ struct TableScoreView: View {
     @Binding var path: NavigationPath
     @Environment(\.modelContext) private var context
     @Environment(\.scenePhase) private var scenePhase
+    @EnvironmentObject private var live: LiveShareCenter
 
     /// rows[roundIndex][playerIndex] = 入力テキスト（ポイント or 素点）。
     @State private var rows: [[String]] = []
@@ -22,6 +23,7 @@ struct TableScoreView: View {
     @State private var loaded = false
     @State private var showSettings = false
     @State private var showRules = false
+    @State private var showLive = false
     @State private var ruleCache: GameRule?
 
     // 自動保存
@@ -86,6 +88,13 @@ struct TableScoreView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
+                Button { showLive = true } label: {
+                    Image(systemName: "dot.radiowaves.left.and.right")
+                        .symbolEffect(.variableColor.iterative, isActive: isSharing)
+                }
+                .accessibilityLabel(isSharing ? "共有中" : "みんなに共有")
+            }
+            ToolbarItem(placement: .topBarTrailing) {
                 Button { showSettings = true } label: { Image(systemName: "gearshape") }
             }
             ToolbarItem(placement: .topBarTrailing) {
@@ -96,6 +105,9 @@ struct TableScoreView: View {
         }
         .sheet(isPresented: $showSettings) { GameSettingsSheet(session: session) }
         .sheet(isPresented: $showRules) { RuleSettingsSheet(session: session) }
+        .sheet(isPresented: $showLive) { LiveHostSheet(session: session) }
+        // 入力が保存されるたびに、共有中なら見ている人へ最新の内容を送る。
+        .onChange(of: session.updatedAt) { _, _ in live.publish(session) }
         .onAppear {
             loadIfNeeded()
             // 入力途中でアプリを閉じても、次の起動でこのゲームに戻れるようにする。
@@ -120,6 +132,7 @@ struct TableScoreView: View {
                 VStack(alignment: .leading, spacing: Space.sm) {
                     HStack(spacing: Space.sm) {
                         modePill
+                        if isSharing { sharingPill }
                         Spacer()
                         saveIndicator
                     }
@@ -164,6 +177,23 @@ struct TableScoreView: View {
         .foregroundStyle(Theme.accent)
         .padding(.horizontal, Space.sm).padding(.vertical, 4)
         .background(RoundedRectangle(cornerRadius: Radius.pill).fill(Theme.accent.opacity(0.10)))
+    }
+
+    private var isSharing: Bool { live.hostingSessionID == session.id }
+
+    /// 共有中のしるし。タップで共有の画面を開く。
+    private var sharingPill: some View {
+        Button { showLive = true } label: {
+            HStack(spacing: 5) {
+                LiveDot(color: Theme.accent, pulsing: true)
+                Text(live.viewerCount == 0 ? "共有中" : "共有中・\(live.viewerCount)人")
+                    .font(AppFont.body(12, weight: .semibold))
+            }
+            .foregroundStyle(Theme.accent)
+            .padding(.horizontal, Space.sm).padding(.vertical, 4)
+            .background(RoundedRectangle(cornerRadius: Radius.pill).stroke(Theme.accent.opacity(0.35), lineWidth: Theme.hairline))
+        }
+        .buttonStyle(.plain)
     }
 
     /// 自動保存の状態表示。保存できていれば時刻、失敗していれば赤で警告。

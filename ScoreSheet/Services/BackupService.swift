@@ -19,7 +19,7 @@ struct PlayerBackup: Codable {
     var createdAt: Date
 }
 
-struct SessionBackup: Codable {
+struct SessionBackup: Codable, Equatable {
     var id: UUID
     var date: Date
     var gameTypeRaw: String
@@ -36,7 +36,7 @@ struct SessionBackup: Codable {
     var rounds: [RoundBackup]
 }
 
-struct RoundBackup: Codable {
+struct RoundBackup: Codable, Equatable {
     var id: UUID
     var roundNumber: Int
     var points: [PlayerRoundPoint]
@@ -58,21 +58,7 @@ enum BackupService {
                 PlayerBackup(id: $0.id, name: $0.name, colorHex: $0.colorHex,
                              iconName: $0.iconName, createdAt: $0.createdAt)
             },
-            sessions: sessions.map { s in
-                SessionBackup(
-                    id: s.id, date: s.date, gameTypeRaw: s.gameTypeRaw,
-                    participants: s.participants, chips: s.chips,
-                    pointCoefficientPer1000: s.pointCoefficientPer1000,
-                    chipPointCoefficient: s.chipPointCoefficient,
-                    tags: s.tags, memo: s.memo,
-                    createdAt: s.createdAt, updatedAt: s.updatedAt,
-                    inputModeRaw: s.inputModeRaw, ruleJSON: s.ruleJSON,
-                    rounds: s.sortedRounds.map {
-                        RoundBackup(id: $0.id, roundNumber: $0.roundNumber,
-                                    points: $0.points, memo: $0.memo, createdAt: $0.createdAt)
-                    }
-                )
-            }
+            sessions: sessions.map(LiveSessionStore.backup(of:))
         )
     }
 
@@ -131,29 +117,7 @@ enum BackupService {
                 summary.skippedSessions += 1
                 continue
             }
-            let session = TableSession(gameType: GameType(rawValue: s.gameTypeRaw) ?? .yonma,
-                                       participants: s.participants)
-            session.id = s.id
-            session.date = s.date
-            session.chips = s.chips
-            session.pointCoefficientPer1000 = s.pointCoefficientPer1000
-            session.chipPointCoefficient = s.chipPointCoefficient
-            session.tags = s.tags
-            session.memo = s.memo
-            session.createdAt = s.createdAt
-            session.updatedAt = s.updatedAt
-            session.inputModeRaw = s.inputModeRaw
-            session.ruleJSON = s.ruleJSON
-            context.insert(session)
-
-            for r in s.rounds {
-                let round = RoundResult(roundNumber: r.roundNumber, points: r.points, memo: r.memo)
-                round.id = r.id
-                round.createdAt = r.createdAt
-                round.session = session
-                session.rounds.append(round)
-                context.insert(round)
-            }
+            LiveSessionStore.insert(s, into: context)
             summary.addedSessions += 1
         }
 

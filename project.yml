@@ -6,7 +6,7 @@ options:
   createIntermediateGroups: true
 settings:
   base:
-    MARKETING_VERSION: "1.2.0"
+    MARKETING_VERSION: "1.3.0"
     CURRENT_PROJECT_VERSION: "11"
     DEVELOPMENT_TEAM: ""
     CODE_SIGN_STYLE: Automatic
@@ -33,6 +33,10 @@ targets:
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         # iPhone専用・縦のみ。iPadは非対応にしたので iPad 向き宣言は不要（削除）。
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait"
+        # 近くのスマホとの卓の共有（v1.3）。`info:` は Info.plist を丸ごと上書きするため使わず、
+        # 追加分だけのファイルを INFOPLIST_FILE に指定して自動生成分とマージさせる。
+        INFOPLIST_FILE: ScoreSheet-Info.plist
+        INFOPLIST_KEY_NSLocalNetworkUsageDescription: 近くにいる人のスマホと卓の成績をリアルタイムで共有するために使います。
     scheme:
       testTargets:
         - ScoreSheetTests

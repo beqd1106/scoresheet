@@ -4,6 +4,7 @@ import SwiftData
 struct HomeView: View {
     @Binding var path: NavigationPath
     @Environment(\.modelContext) private var context
+    @EnvironmentObject private var live: LiveShareCenter
     @Query(sort: \TableSession.date, order: .reverse) private var sessions: [TableSession]
 
     @State private var showSetup = false
@@ -39,6 +40,16 @@ struct HomeView: View {
                     }
                 }
                 .buttonStyle(PrimaryButtonStyle())
+
+                // ほかの人が記録している卓をリアルタイムで見る
+                NavigationLink(value: HomeRoute.liveViewer) {
+                    HStack(spacing: Space.md) {
+                        Image(systemName: "dot.radiowaves.left.and.right")
+                        Text("近くの卓を見る")
+                    }
+                }
+                .buttonStyle(SecondaryButtonStyle())
+                .padding(.top, -Space.md)
 
                 // インデックス（メニュー）
                 VStack(spacing: 0) {
@@ -81,7 +92,11 @@ struct HomeView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .navigationBar)
         // ホームまで戻ってきた＝続きから開く対象はもうない。
-        .onAppear { UserDefaults.standard.removeObject(forKey: AppSettingsKey.resumeSessionID) }
+        // ホームに戻ったら卓の共有も終える（見ている人には「共有は終了しました」と出る）。
+        .onAppear {
+            UserDefaults.standard.removeObject(forKey: AppSettingsKey.resumeSessionID)
+            live.stopHosting()
+        }
         .sheet(isPresented: $showSetup) {
             TableSetupView { session in
                 context.insert(session)

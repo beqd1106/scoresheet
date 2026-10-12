@@ -73,17 +73,22 @@ struct ScoreSheetApp: App {
 
     @AppStorage(AppSettingsKey.appearance) private var appearance: String = Appearance.system.rawValue
     @Environment(\.scenePhase) private var scenePhase
+    /// 近くのスマホとの卓の共有（アプリ全体で1つ）。
+    @StateObject private var live = LiveShareCenter()
 
     var body: some Scene {
         WindowGroup {
             RootView()
                 .preferredColorScheme(Appearance(rawValue: appearance)?.colorScheme)
                 .tint(Theme.accent)
+                .environmentObject(live)
         }
         .modelContainer(container)
         // アプリを閉じるたびに端末内へ自動バックアップを取る（変化がなければ何もしない）。
         .onChange(of: scenePhase) { _, phase in
             if phase != .active { makeAutoBackup() }
+            // 背面にいる間に切れた近くのスマホとの通信を張り直す。
+            live.handleScenePhase(phase)
         }
     }
 

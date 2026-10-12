@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyLists-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- 近くのスマホとの卓の共有（LiveShareCenter.serviceType と一致させる）。
+	     配列は INFOPLIST_KEY_ では書けないため、このファイルだけ置いて自動生成分とマージさせる。 -->
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_scoresheet-live._tcp</string>
+		<string>_scoresheet-live._udp</string>
+	</array>
+</dict>
+</plist>
