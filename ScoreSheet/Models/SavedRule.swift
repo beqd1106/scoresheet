@@ -29,7 +29,8 @@ struct SavedRule: Codable, Identifiable, Equatable {
         self.rule = rule
         self.pointCoefficientPer1000 = pointCoefficientPer1000
         self.chipPointCoefficient = chipPointCoefficient
-        self.createdAt = createdAt
+        // 保存（iso8601）で秒未満が落ちるので、最初から秒単位にそろえて前後で同じ値にする。
+        self.createdAt = Date(timeIntervalSince1970: createdAt.timeIntervalSince1970.rounded(.down))
     }
 
     /// 画面に出す1行の要約（例：四麻・素点・25000持ち30000返し・ウマ+20/+10/-10/-20）。
