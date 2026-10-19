@@ -10,10 +10,17 @@ struct TableSetupView: View {
     @AppStorage(AppSettingsKey.pointCoefficientPer1000) private var defaultPer1000 = AppDefaults.pointCoefficientPer1000
     @AppStorage(AppSettingsKey.chipPointCoefficient) private var defaultChip = AppDefaults.chipPointCoefficient
     @AppStorage(AppSettingsKey.defaultInputMode) private var defaultInputModeRaw = InputMode.point.rawValue
+    @AppStorage(AppSettingsKey.savedRules) private var savedRulesJSON = ""
+    @AppStorage(AppSettingsKey.defaultSavedRuleID) private var defaultSavedRuleID = ""
 
     @State private var vm = TableSetupViewModel()
     @State private var newPlayerName = ""
     @State private var newTag = ""
+    /// 既定値の読み込みは最初の1回だけ（ルール編集から戻るたびに初期化しないため）。
+    @State private var didLoadDefaults = false
+    @State private var showSaveRule = false
+    @State private var saveRuleName = ""
+    @State private var savedNotice: String?
 
     let onStart: (TableSession) -> Void
 
@@ -28,6 +35,8 @@ struct TableSetupView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: Space.xl) {
+
+                    savedRulesSection
 
                     // 種別
                     VStack(alignment: .leading, spacing: Space.md) {
@@ -151,13 +160,131 @@ struct TableSetupView: View {
                 }
             }
             .onAppear {
+                guard !didLoadDefaults else { return }
+                didLoadDefaults = true
                 vm.gameType = GameType(rawValue: defaultGameTypeRaw) ?? .yonma
                 vm.pointCoefficientPer1000 = defaultPer1000
                 vm.chipPointCoefficient = defaultChip
                 vm.inputMode = InputMode(rawValue: defaultInputModeRaw) ?? .point
                 vm.rule = GameRule.standard(for: vm.gameType)
+                if let saved = savedRules.first(where: { $0.id.uuidString == defaultSavedRuleID }) {
+                    vm.apply(saved)
+                }
+            }
+            .alert("今の設定を保存", isPresented: $showSaveRule) {
+                TextField("名前（例：いつもの雀荘）", text: $saveRuleName)
+                Button("キャンセル", role: .cancel) {}
+                Button("保存") { saveCurrentRule() }
+            } message: {
+                Text("種別・入力方式・ルール・係数をまとめて保存します。同じ名前があれば上書きします。")
             }
         }
+    }
+
+    // MARK: 保存したルール
+
+    private var savedRules: [SavedRule] { SavedRuleStore.decode(savedRulesJSON) }
+
+    private var savedRulesSection: some View {
+        let rules = savedRules
+        return VStack(alignment: .leading, spacing: Space.md) {
+            SectionLabel(text: "保存したルール")
+            if rules.isEmpty {
+                Text("よく使う設定を保存しておくと、次からワンタップで呼び出せます。")
+                    .font(AppFont.body(12)).foregroundStyle(Theme.inkFaint)
+            }
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: Space.sm) {
+                    ForEach(rules) { saved in
+                        savedRuleChip(saved)
+                    }
+                    Button {
+                        saveRuleName = SavedRuleStore.suggestedName(existing: rules)
+                        showSaveRule = true
+                    } label: {
+                        Label("今の設定を保存", systemImage: "plus")
+                            .font(AppFont.body(13, weight: .semibold))
+                            .foregroundStyle(Theme.accent)
+                            .padding(.horizontal, Space.md)
+                            .frame(minHeight: 48)
+                            .background(
+                                RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
+                                    .stroke(Theme.accent.opacity(0.5),
+                                            style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.vertical, 2)
+            }
+            if let savedNotice {
+                Text(savedNotice).font(AppFont.body(12)).foregroundStyle(Theme.accent)
+            }
+        }
+    }
+
+    private func savedRuleChip(_ saved: SavedRule) -> some View {
+        let active = vm.isCurrent(saved)
+        let isDefault = saved.id.uuidString == defaultSavedRuleID
+        return Button {
+            vm.apply(saved)
+            savedNotice = nil
+        } label: {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 4) {
+                    if isDefault {
+                        Image(systemName: "star.fill").font(.system(size: 10))
+                            .foregroundStyle(active ? Color.white : Theme.accentYellow)
+                    }
+                    Text(saved.name)
+                        .font(AppFont.body(14, weight: .semibold))
+                        .foregroundStyle(active ? Color.white : Theme.ink)
+                        .lineLimit(1)
+                }
+                Text("\(saved.gameType.displayName)・\(saved.inputMode == .rawScore ? "素点" : "ポイント")")
+                    .font(AppFont.body(11))
+                    .foregroundStyle(active ? Color.white.opacity(0.85) : Theme.inkFaint)
+            }
+            .padding(.horizontal, Space.md)
+            .padding(.vertical, Space.sm)
+            .frame(minWidth: 112, minHeight: 48, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
+                    .fill(active ? Theme.accent : Theme.card)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
+                    .stroke(active ? Color.clear : Theme.rule, lineWidth: Theme.hairline)
+            )
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
+            Button {
+                defaultSavedRuleID = isDefault ? "" : saved.id.uuidString
+            } label: {
+                Label(isDefault ? "「いつもの」を解除" : "「いつもの」にする（最初から選ぶ）",
+                      systemImage: isDefault ? "star.slash" : "star")
+            }
+            Button {
+                overwrite(saved)
+            } label: {
+                Label("今の設定で上書き", systemImage: "square.and.arrow.down")
+            }
+        }
+    }
+
+    private func saveCurrentRule() {
+        let name = SavedRuleStore.normalizedName(saveRuleName)
+        guard !name.isEmpty else { return }
+        let result = SavedRuleStore.upsert(vm.makeSavedRule(name: name), into: savedRules)
+        savedRulesJSON = SavedRuleStore.encode(result.rules)
+        savedNotice = result.replaced ? "「\(name)」を上書きしました。" : "「\(name)」を保存しました。"
+    }
+
+    private func overwrite(_ saved: SavedRule) {
+        let result = SavedRuleStore.upsert(vm.makeSavedRule(name: saved.name), into: savedRules)
+        savedRulesJSON = SavedRuleStore.encode(result.rules)
+        savedNotice = "「\(saved.name)」を今の設定で上書きしました。"
     }
 
     private var ruleEditorPage: some View {

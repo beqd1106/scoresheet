@@ -9,6 +9,8 @@ struct BackupFile: Codable {
     var exportedAt: Date = Date()
     var players: [PlayerBackup] = []
     var sessions: [SessionBackup] = []
+    /// 保存したルール（1.4.0 から。古いファイルには無い）。
+    var savedRules: [SavedRule]? = nil
 }
 
 struct PlayerBackup: Codable {
@@ -50,7 +52,8 @@ struct RoundBackup: Codable, Equatable {
 /// 端末の故障・機種変更に備えた手動バックアップ用。
 enum BackupService {
 
-    static func makeBackup(players: [Player], sessions: [TableSession]) -> BackupFile {
+    static func makeBackup(players: [Player], sessions: [TableSession],
+                           savedRules: [SavedRule] = SavedRuleStore.load()) -> BackupFile {
         BackupFile(
             version: 1,
             exportedAt: Date(),
@@ -58,7 +61,8 @@ enum BackupService {
                 PlayerBackup(id: $0.id, name: $0.name, colorHex: $0.colorHex,
                              iconName: $0.iconName, createdAt: $0.createdAt)
             },
-            sessions: sessions.map(LiveSessionStore.backup(of:))
+            sessions: sessions.map(LiveSessionStore.backup(of:)),
+            savedRules: savedRules.isEmpty ? nil : savedRules
         )
     }
 
@@ -95,12 +99,21 @@ enum BackupService {
         var addedPlayers = 0
         var addedSessions = 0
         var skippedSessions = 0
+        var addedRules = 0
     }
 
     /// バックアップを取り込む。既にある ID はそのまま残し、足りないものだけ追加する（上書きしない）。
     @discardableResult
-    static func restore(_ backup: BackupFile, into context: ModelContext) throws -> RestoreSummary {
+    static func restore(_ backup: BackupFile, into context: ModelContext,
+                        defaults: UserDefaults = .standard) throws -> RestoreSummary {
         var summary = RestoreSummary()
+
+        // 保存ルールも、同じ ID・同じ名前が無いものだけ足す。
+        if let rules = backup.savedRules, !rules.isEmpty {
+            let merged = SavedRuleStore.merge(rules, into: SavedRuleStore.load(defaults))
+            if merged.added > 0 { SavedRuleStore.save(merged.rules, defaults) }
+            summary.addedRules = merged.added
+        }
 
         let existingPlayerIDs = Set((try? context.fetch(FetchDescriptor<Player>()))?.map(\.id) ?? [])
         for p in backup.players where !existingPlayerIDs.contains(p.id) {

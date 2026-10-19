@@ -12,6 +12,10 @@ enum AppSettingsKey {
     static let storeArchivedAt = "settings.storeArchivedAt"
     /// 入力途中で閉じたゲームの ID。次の起動でここから再開する。
     static let resumeSessionID = "settings.resumeSessionID"
+    /// 保存したルール一覧（SavedRule 配列の JSON）。
+    static let savedRules = "settings.savedRules"
+    /// 新規ゲームで最初から使う保存ルールの ID（空ならアプリ既定）。
+    static let defaultSavedRuleID = "settings.defaultSavedRuleID"
 }
 
 enum Appearance: String, CaseIterable, Identifiable {

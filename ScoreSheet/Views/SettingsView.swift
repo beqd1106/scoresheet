@@ -9,6 +9,7 @@ struct SettingsView: View {
     @AppStorage(AppSettingsKey.quickPoints) private var quickPointsRaw = "50,100,150,200,300"
     @AppStorage(AppSettingsKey.appearance) private var appearanceRaw = Appearance.system.rawValue
     @AppStorage(AppSettingsKey.defaultInputMode) private var defaultInputModeRaw = InputMode.point.rawValue
+    @AppStorage(AppSettingsKey.savedRules) private var savedRulesJSON = ""
 
     @Environment(\.modelContext) private var context
     @Query(sort: \Player.createdAt) private var players: [Player]
@@ -65,6 +66,31 @@ struct SettingsView: View {
                     }
                 }
 
+                // 保存したルール
+                VStack(alignment: .leading, spacing: Space.md) {
+                    SectionLabel(text: "保存したルール")
+                    NavigationLink { SavedRulesView() } label: {
+                        HStack(spacing: Space.md) {
+                            Image(systemName: "bookmark")
+                                .font(.system(size: 16)).foregroundStyle(Theme.mutedBlue)
+                                .frame(width: 28)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("保存したルールを管理").font(AppFont.body(16)).foregroundStyle(Theme.ink)
+                                Text(savedRuleCountText).font(AppFont.body(12)).foregroundStyle(Theme.inkFaint)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.inkFaint)
+                        }
+                        .padding(Space.lg)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .background(RoundedRectangle(cornerRadius: Radius.card, style: .continuous).fill(Theme.card))
+                    .overlay(RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
+                        .stroke(Theme.rule, lineWidth: Theme.hairline))
+                }
+
                 // よく使うポイント
                 VStack(alignment: .leading, spacing: Space.sm) {
                     SectionLabel(text: "よく使うポイント（カンマ区切り）")
@@ -91,7 +117,7 @@ struct SettingsView: View {
                     SectionLabel(text: "データ")
                     VStack(spacing: 0) {
                         dataRow(icon: "square.and.arrow.up", title: "バックアップを書き出す",
-                                detail: "ゲーム\(sessions.count)件・プレイヤー\(players.count)人") {
+                                detail: "ゲーム\(sessions.count)件・プレイヤー\(players.count)人・保存したルール") {
                             exportBackup()
                         }
                         HairlineRule().padding(.leading, 44)
@@ -153,6 +179,19 @@ struct SettingsView: View {
                 applyCSV(preview, tag: tag)
             }
         }
+    }
+
+    private var savedRuleCountText: String {
+        let count = SavedRuleStore.decode(savedRulesJSON).count
+        return count == 0 ? "名前・並び順・「いつもの」を設定できます" : "\(count)件・名前や中身の編集、並び替え、削除"
+    }
+
+    /// 復元結果の文言。
+    private func restoreMessage(_ summary: BackupService.RestoreSummary) -> String {
+        "復元しました：ゲーム\(summary.addedSessions)件・プレイヤー\(summary.addedPlayers)人"
+            + (summary.addedRules > 0 ? "・ルール\(summary.addedRules)件" : "")
+            + "を追加"
+            + (summary.skippedSessions > 0 ? "（重複\(summary.skippedSessions)件はそのまま）" : "")
     }
 
     // MARK: データ操作
@@ -234,8 +273,7 @@ struct SettingsView: View {
         do {
             let summary = try AutoBackupService.restore(snapshot, into: context)
             backupFailed = false
-            backupMessage = "復元しました：ゲーム\(summary.addedSessions)件・プレイヤー\(summary.addedPlayers)人を追加"
-                + (summary.skippedSessions > 0 ? "（重複\(summary.skippedSessions)件はそのまま）" : "")
+            backupMessage = restoreMessage(summary)
         } catch {
             backupFailed = true
             backupMessage = "復元できませんでした。"
@@ -265,8 +303,7 @@ struct SettingsView: View {
             let backup = try BackupService.decode(data)
             let summary = try BackupService.restore(backup, into: context)
             backupFailed = false
-            backupMessage = "復元しました：ゲーム\(summary.addedSessions)件・プレイヤー\(summary.addedPlayers)人を追加"
-                + (summary.skippedSessions > 0 ? "（重複\(summary.skippedSessions)件はそのまま）" : "")
+            backupMessage = restoreMessage(summary)
         } catch {
             backupFailed = true
             backupMessage = "復元できませんでした。スコアシートで書き出したファイルか確認してください。"

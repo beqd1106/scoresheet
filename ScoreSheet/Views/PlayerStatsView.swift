@@ -139,6 +139,7 @@ struct PlayerStatsDetailView: View {
 
     @Query(sort: \TableSession.date, order: .reverse) private var sessions: [TableSession]
     @Query(sort: \Player.createdAt) private var players: [Player]
+    @State private var showAllOpponents = false
 
     init(playerID: UUID, initialFilter: StatsFilter) {
         self.playerID = playerID
@@ -165,6 +166,7 @@ struct PlayerStatsDetailView: View {
                 if let s = stats {
                     header(s)
                     kpiGrid(s)
+                    opponentSection(s)
                     rankSection(s)
                     trendSection(s)
                     recordSection(s)
@@ -250,6 +252,64 @@ struct PlayerStatsDetailView: View {
         .background(RoundedRectangle(cornerRadius: Radius.control, style: .continuous).fill(Theme.card))
         .overlay(RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
             .stroke(Theme.rule, lineWidth: Theme.hairline))
+    }
+
+    // MARK: 同卓した相手
+
+    @ViewBuilder
+    private func opponentSection(_ s: PlayerStats) -> some View {
+        let all = s.opponents
+        if !all.isEmpty {
+            let limit = 8
+            let shown = showAllOpponents ? all : Array(all.prefix(limit))
+            VStack(alignment: .leading, spacing: Space.md) {
+                SectionLabel(text: "同卓した相手", systemImage: "person.2")
+                VStack(spacing: 0) {
+                    ForEach(Array(shown.enumerated()), id: \.element.id) { idx, o in
+                        if idx > 0 { HairlineRule().padding(.leading, Space.lg) }
+                        opponentRow(o)
+                    }
+                    if all.count > limit {
+                        HairlineRule()
+                        Button {
+                            withAnimation(.easeOut(duration: 0.2)) { showAllOpponents.toggle() }
+                        } label: {
+                            Text(showAllOpponents ? "閉じる" : "すべて表示（\(all.count)人）")
+                                .font(AppFont.body(13, weight: .semibold)).foregroundStyle(Theme.accent)
+                                .frame(maxWidth: .infinity, minHeight: 44)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .background(RoundedRectangle(cornerRadius: Radius.card, style: .continuous).fill(Theme.card))
+                .overlay(RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
+                    .stroke(Theme.rule, lineWidth: Theme.hairline))
+                Text("その人と同じゲームに入ったときの、\(s.name)さんの総合ポイント合計です。「上回り」は同じ回戦で相手より上の着順だった割合です。")
+                    .font(AppFont.body(12)).foregroundStyle(Theme.inkFaint)
+            }
+        }
+    }
+
+    private func opponentRow(_ o: OpponentRecord) -> some View {
+        HStack(spacing: Space.md) {
+            PlayerDot(colorHex: o.colorHex, size: 10)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(o.name).font(AppFont.body(15, weight: .semibold)).foregroundStyle(Theme.ink)
+                    .lineLimit(1)
+                Text("\(o.games)ゲーム・平均\(String(format: "%.2f", o.averageRank))着・上回り\(o.rounds == 0 ? "—" : o.aboveRate.percentString)")
+                    .font(AppFont.body(12)).foregroundStyle(Theme.inkSecond)
+                    .lineLimit(1).minimumScaleFactor(0.75)
+            }
+            Spacer(minLength: Space.sm)
+            VStack(alignment: .trailing, spacing: 2) {
+                PointText(value: o.myGrandTotal, size: 16)
+                Text("相手 \(o.theirGrandTotal.signedPointString)")
+                    .font(AppFont.number(11)).foregroundStyle(Theme.inkFaint)
+            }
+        }
+        .padding(.horizontal, Space.lg)
+        .padding(.vertical, Space.md)
+        .accessibilityElement(children: .combine)
     }
 
     // MARK: 順位分布

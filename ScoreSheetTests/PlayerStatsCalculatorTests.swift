@@ -133,4 +133,37 @@ final class PlayerStatsCalculatorTests: XCTestCase {
         XCTAssertEqual(ra.averageRank, 1.0, accuracy: 0.0001)
         XCTAssertEqual(StatsGame(session: session).rounds.count, 1)
     }
+
+    func testOpponentRecords() throws {
+        let stats = PlayerStatsCalculator.aggregate(games: [yonmaGame, sanmaGame])
+        let sa = try XCTUnwrap(stats.first { $0.id == a.id })
+
+        // 同卓回数の多い順・同数は自分のポイント→名前の順
+        XCTAssertEqual(sa.opponents.map(\.name), ["B", "C", "D"])
+
+        let vsB = try XCTUnwrap(sa.opponentRecords[b.id])
+        XCTAssertEqual(vsB.games, 2)
+        XCTAssertEqual(vsB.rounds, 3)
+        XCTAssertEqual(vsB.aboveCount, 2)                 // 1着vs2着・4着vs1着・1着vs2着
+        XCTAssertEqual(vsB.averageRank, 2.0, accuracy: 0.0001)
+        XCTAssertEqual(vsB.myGrandTotal, 2250)
+        XCTAssertEqual(vsB.theirGrandTotal, 2750)
+        XCTAssertEqual(vsB.difference, -500)
+
+        let vsD = try XCTUnwrap(sa.opponentRecords[d.id])
+        XCTAssertEqual(vsD.games, 1)                      // 三麻にはいない
+        XCTAssertEqual(vsD.rounds, 2)
+        XCTAssertEqual(vsD.aboveRate, 0.5, accuracy: 0.0001)
+    }
+
+    func testOpponentRecordsRespectFilterAndRosterName() throws {
+        let roster: [UUID: (name: String, colorHex: String)] = [b.id: (name: "びー", colorHex: "999999")]
+        let stats = PlayerStatsCalculator.aggregate(games: [yonmaGame, sanmaGame],
+                                                    filter: StatsFilter(gameType: .sanma),
+                                                    roster: roster)
+        let sa = try XCTUnwrap(stats.first { $0.id == a.id })
+        XCTAssertEqual(sa.opponents.count, 2)             // 三麻だけ → B と C
+        XCTAssertEqual(sa.opponentRecords[b.id]?.name, "びー")
+        XCTAssertEqual(sa.opponentRecords[b.id]?.games, 1)
+    }
 }

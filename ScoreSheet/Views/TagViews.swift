@@ -54,6 +54,10 @@ struct GameSettingsSheet: View {
     @Query private var allSessions: [TableSession]
 
     @State private var newTag = ""
+    @AppStorage(AppSettingsKey.savedRules) private var savedRulesJSON = ""
+    @State private var showSaveRule = false
+    @State private var saveRuleName = ""
+    @State private var savedNotice: String?
 
     private var suggestions: [String] {
         let used = Set(session.tags)
@@ -118,6 +122,22 @@ struct GameSettingsSheet: View {
                         }
                         Text("総合計 = 対局ポイント×1000点係数 ＋ チップ枚数×チップ係数")
                             .font(AppFont.body(12)).foregroundStyle(Theme.inkFaint)
+
+                        Button {
+                            saveRuleName = SavedRuleStore.suggestedName(existing: SavedRuleStore.decode(savedRulesJSON))
+                            showSaveRule = true
+                        } label: {
+                            Label("この設定をルールとして保存", systemImage: "bookmark")
+                                .font(AppFont.body(14, weight: .semibold))
+                                .foregroundStyle(Theme.accent)
+                                .frame(maxWidth: .infinity, minHeight: 44)
+                                .background(RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
+                                    .fill(Theme.accent.opacity(0.10)))
+                        }
+                        .buttonStyle(.plain)
+                        if let savedNotice {
+                            Text(savedNotice).font(AppFont.body(12)).foregroundStyle(Theme.accent)
+                        }
                     }
 
                     // タグ
@@ -158,6 +178,13 @@ struct GameSettingsSheet: View {
             .background(NotePageBackground())
             .navigationTitle("ゲーム設定")
             .navigationBarTitleDisplayMode(.inline)
+            .alert("この設定を保存", isPresented: $showSaveRule) {
+                TextField("名前（例：いつもの雀荘）", text: $saveRuleName)
+                Button("キャンセル", role: .cancel) {}
+                Button("保存") { saveAsRule() }
+            } message: {
+                Text("次の新規ゲームから呼び出せます。同じ名前があれば上書きします。")
+            }
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("完了") { session.updatedAt = Date(); try? context.save(); dismiss() }
@@ -215,6 +242,18 @@ struct GameSettingsSheet: View {
         newTag = ""
     }
     private func remove(_ t: String) { session.tags.removeAll { $0 == t } }
+
+    private func saveAsRule() {
+        let name = SavedRuleStore.normalizedName(saveRuleName)
+        guard !name.isEmpty else { return }
+        let item = SavedRule(name: name, gameType: session.gameType, inputMode: session.inputMode,
+                             rule: session.rule,
+                             pointCoefficientPer1000: session.pointCoefficientPer1000,
+                             chipPointCoefficient: session.chipPointCoefficient)
+        let result = SavedRuleStore.upsert(item, into: SavedRuleStore.decode(savedRulesJSON))
+        savedRulesJSON = SavedRuleStore.encode(result.rules)
+        savedNotice = result.replaced ? "「\(name)」を上書きしました。" : "「\(name)」を保存しました。"
+    }
 }
 
 // MARK: - タグ一覧

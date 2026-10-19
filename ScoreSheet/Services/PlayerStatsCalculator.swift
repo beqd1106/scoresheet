@@ -60,6 +60,28 @@ struct PlayerGameRecord: Identifiable, Equatable {
     var cumulative: Int     // このゲームまでの総合ポイント累計
 }
 
+/// ある相手と同卓したときの成績（見ている本人から見た値）。
+struct OpponentRecord: Identifiable, Equatable {
+    let id: UUID            // 相手のプレイヤー ID
+    var name: String
+    var colorHex: String
+    var games = 0
+    var rounds = 0
+    /// 同卓したゲームでの自分の総合ポイント合計。
+    var myGrandTotal = 0
+    /// 同卓したゲームでの相手の総合ポイント合計。
+    var theirGrandTotal = 0
+    var myRankSum = 0
+    /// 同じ回戦で相手より上の着順だった回数。
+    var aboveCount = 0
+
+    var averageRank: Double { rounds == 0 ? 0 : Double(myRankSum) / Double(rounds) }
+    /// 相手より上だった割合（回戦単位）。
+    var aboveRate: Double { rounds == 0 ? 0 : Double(aboveCount) / Double(rounds) }
+    /// 自分 − 相手 の総合ポイント差。
+    var difference: Int { myGrandTotal - theirGrandTotal }
+}
+
 /// プレイヤー 1人分の通算成績。
 struct PlayerStats: Identifiable, Equatable {
     let id: UUID
@@ -83,6 +105,17 @@ struct PlayerStats: Identifiable, Equatable {
     var bestRoundPoint: Int? = nil
     var worstRoundPoint: Int? = nil
     var history: [PlayerGameRecord] = []   // 日付の古い順
+    /// 同卓した相手ごとの成績（キー＝相手 ID）。並べ替え済みは `opponents`。
+    var opponentRecords: [UUID: OpponentRecord] = [:]
+
+    /// 同卓回数の多い順（同数は自分のポイントが多い順）。
+    var opponents: [OpponentRecord] {
+        opponentRecords.values.sorted { a, b in
+            if a.games != b.games { return a.games > b.games }
+            if a.myGrandTotal != b.myGrandTotal { return a.myGrandTotal > b.myGrandTotal }
+            return a.name < b.name
+        }
+    }
 
     // MARK: 率
 
@@ -155,6 +188,29 @@ enum PlayerStatsCalculator {
                         s.rawScoreSum += raw
                         if raw < 0 { s.tobiCount += 1 }
                     }
+                }
+
+                // 同卓した相手ごとの集計
+                for q in game.participants where q.id != p.id {
+                    var o = s.opponentRecords[q.id] ?? OpponentRecord(
+                        id: q.id,
+                        name: roster[q.id]?.name ?? q.name,
+                        colorHex: roster[q.id]?.colorHex ?? q.colorHex)
+                    if roster[q.id] == nil {
+                        o.name = q.name
+                        o.colorHex = q.colorHex
+                    }
+                    o.games += 1
+                    o.myGrandTotal += grand
+                    o.theirGrandTotal += game.grandTotals[q.id] ?? 0
+                    for round in game.rounds {
+                        guard let mine = round.first(where: { $0.participantID == p.id }),
+                              let theirs = round.first(where: { $0.participantID == q.id }) else { continue }
+                        o.rounds += 1
+                        o.myRankSum += mine.rank
+                        if mine.rank < theirs.rank { o.aboveCount += 1 }
+                    }
+                    s.opponentRecords[q.id] = o
                 }
 
                 let cumulative = (s.history.last?.cumulative ?? 0) + grand

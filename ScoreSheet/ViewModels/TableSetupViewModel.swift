@@ -53,6 +53,35 @@ final class TableSetupViewModel {
         }
     }
 
+    // MARK: 保存ルール
+
+    /// 保存ルールを当てはめる（種別・入力方式・係数・ルールをまとめて）。
+    func apply(_ saved: SavedRule) {
+        gameType = saved.gameType
+        inputMode = saved.inputMode
+        pointCoefficientPer1000 = saved.pointCoefficientPer1000
+        chipPointCoefficient = saved.chipPointCoefficient
+        var r = saved.rule
+        r.normalize(for: saved.gameType)
+        rule = r
+        if selectedPlayerIDs.count > requiredCount {
+            selectedPlayerIDs = Array(selectedPlayerIDs.prefix(requiredCount))
+        }
+    }
+
+    /// 今の設定を保存ルールにする。
+    func makeSavedRule(name: String) -> SavedRule {
+        SavedRule(name: name, gameType: gameType, inputMode: inputMode, rule: rule,
+                  pointCoefficientPer1000: pointCoefficientPer1000,
+                  chipPointCoefficient: chipPointCoefficient)
+    }
+
+    func isCurrent(_ saved: SavedRule) -> Bool {
+        saved.matches(gameType: gameType, inputMode: inputMode, rule: rule,
+                      pointCoefficientPer1000: pointCoefficientPer1000,
+                      chipPointCoefficient: chipPointCoefficient)
+    }
+
     var canStart: Bool { selectedPlayerIDs.count == requiredCount }
 
     var validationMessage: String? {
