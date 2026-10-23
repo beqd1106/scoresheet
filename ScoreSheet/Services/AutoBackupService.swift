@@ -61,12 +61,14 @@ enum AutoBackupService {
     @discardableResult
     static func snapshotIfNeeded(players: [Player],
                                  sessions: [TableSession],
+                                 savedRules: [SavedRule]? = nil,
                                  in directory: URL? = nil,
                                  now: Date = Date()) -> AutoBackupSnapshot? {
         guard let dir = directory ?? defaultDirectory() else { return nil }
         guard !sessions.isEmpty || !players.isEmpty else { return nil }
 
-        var backup = BackupService.makeBackup(players: players, sessions: sessions)
+        var backup = BackupService.makeBackup(players: players, sessions: sessions,
+                                              savedRules: savedRules ?? SavedRuleStore.load())
         backup.exportedAt = now
         let hash = payloadHash(backup)
 

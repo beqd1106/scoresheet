@@ -24,6 +24,9 @@ struct SettingsView: View {
     @State private var backupMessage: String?
     @State private var backupFailed = false
     @State private var autoBackups: [AutoBackupSnapshot] = []
+    @State private var showResetChoice = false
+    @State private var pendingReset: DataResetService.AllScope?
+    @State private var resetMessage: String?
 
     private var defaultGameType: Binding<GameType> {
         Binding(get: { GameType(rawValue: defaultGameTypeRaw) ?? .yonma },
@@ -148,6 +151,38 @@ struct SettingsView: View {
                     autoBackupList
                 }
 
+                // リセット
+                VStack(alignment: .leading, spacing: Space.md) {
+                    SectionLabel(text: "リセット")
+                    Button { showResetChoice = true } label: {
+                        HStack(spacing: Space.md) {
+                            Image(systemName: "trash")
+                                .font(.system(size: 16)).foregroundStyle(Theme.negative)
+                                .frame(width: 28)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("データをリセット").font(AppFont.body(16)).foregroundStyle(Theme.negative)
+                                Text("ゲームの記録だけ、またはすべてを消します")
+                                    .font(AppFont.body(12)).foregroundStyle(Theme.inkFaint)
+                            }
+                            Spacer()
+                        }
+                        .padding(Space.lg)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(sessions.isEmpty && players.isEmpty && SavedRuleStore.decode(savedRulesJSON).isEmpty)
+                    .background(RoundedRectangle(cornerRadius: Radius.card, style: .continuous).fill(Theme.card))
+                    .overlay(RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
+                        .stroke(Theme.rule, lineWidth: Theme.hairline))
+                    if let resetMessage {
+                        Text(resetMessage)
+                            .font(AppFont.body(12))
+                            .foregroundStyle(backupFailed ? Theme.accentRed : Theme.accent)
+                    }
+                    Text("プレイヤーごとに消したいときは「プレイヤー」画面のゴミ箱から。消す前の状態は自動バックアップに残るので、間違えても上の一覧から戻せます。")
+                        .font(AppFont.body(12)).foregroundStyle(Theme.inkFaint)
+                }
+
                 // 表現ポリシー
                 NoteCard {
                     VStack(alignment: .leading, spacing: Space.sm) {
@@ -173,6 +208,26 @@ struct SettingsView: View {
             case .backup: handleImport(result)
             case .csv:    handleCSVSelection(result)
             }
+        }
+        .confirmationDialog("何を消しますか？", isPresented: $showResetChoice, titleVisibility: .visible) {
+            Button("ゲームの記録だけ（\(sessions.count)件）", role: .destructive) { pendingReset = .gamesOnly }
+            Button("すべて（ゲーム・プレイヤー・保存したルール）", role: .destructive) { pendingReset = .everything }
+            Button("キャンセル", role: .cancel) {}
+        } message: {
+            Text("「ゲームの記録だけ」ならプレイヤーと保存したルールは残ります。")
+        }
+        .alert("本当に消しますか？", isPresented: Binding(
+            get: { pendingReset != nil }, set: { if !$0 { pendingReset = nil } }
+        )) {
+            Button("キャンセル", role: .cancel) { pendingReset = nil }
+            Button("消す", role: .destructive) {
+                if let scope = pendingReset { reset(scope) }
+                pendingReset = nil
+            }
+        } message: {
+            Text(pendingReset == .everything
+                 ? "ゲーム\(sessions.count)件・プレイヤー\(players.count)人・保存したルールをすべて消し、最初の状態に戻します。"
+                 : "ゲーム\(sessions.count)件をすべて消します。プレイヤーと保存したルールは残ります。")
         }
         .sheet(item: $csvPreview) { preview in
             CSVImportSheet(preview: preview) { tag in
@@ -278,6 +333,21 @@ struct SettingsView: View {
             backupFailed = true
             backupMessage = "復元できませんでした。"
         }
+    }
+
+    private func reset(_ scope: DataResetService.AllScope) {
+        backupMessage = nil
+        do {
+            let summary = try DataResetService.resetAll(scope: scope, context: context)
+            backupFailed = false
+            resetMessage = scope == .everything
+                ? "すべて消しました（ゲーム\(summary.deletedSessions)件・プレイヤー\(summary.deletedPlayers)人）。"
+                : "ゲームの記録\(summary.deletedSessions)件を消しました。"
+        } catch {
+            backupFailed = true
+            resetMessage = "リセットできませんでした。もう一度お試しください。"
+        }
+        reloadAutoBackups()
     }
 
     private func exportBackup() {

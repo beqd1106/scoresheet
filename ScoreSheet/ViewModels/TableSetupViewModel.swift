@@ -9,6 +9,8 @@ final class TableSetupViewModel {
     var pointCoefficientPer1000: Double
     var chipPointCoefficient: Double
     var tags: [String] = []
+    /// 保存ルールから付いたタグ。別のルールに切り替えたら外す（手で足したタグは残す）。
+    private(set) var tagsFromRule: [String] = []
     var memo: String = ""
     var inputMode: InputMode = .point
     var rule: GameRule = GameRule.standard(for: .yonma)
@@ -64,6 +66,10 @@ final class TableSetupViewModel {
         var r = saved.rule
         r.normalize(for: saved.gameType)
         rule = r
+        tags.removeAll { tagsFromRule.contains($0) }
+        let added = saved.tags.filter { !tags.contains($0) }
+        tags.append(contentsOf: added)
+        tagsFromRule = added
         if selectedPlayerIDs.count > requiredCount {
             selectedPlayerIDs = Array(selectedPlayerIDs.prefix(requiredCount))
         }
@@ -73,7 +79,8 @@ final class TableSetupViewModel {
     func makeSavedRule(name: String) -> SavedRule {
         SavedRule(name: name, gameType: gameType, inputMode: inputMode, rule: rule,
                   pointCoefficientPer1000: pointCoefficientPer1000,
-                  chipPointCoefficient: chipPointCoefficient)
+                  chipPointCoefficient: chipPointCoefficient,
+                  tags: tags)
     }
 
     func isCurrent(_ saved: SavedRule) -> Bool {

@@ -4,10 +4,15 @@ import Charts
 
 // MARK: - 絞り込みバー（一覧・詳細で共通）
 
-/// 種別（すべて/四麻/三麻）と年で絞り込む。
+/// 種別（すべて/四麻/三麻）・年・タグ・メンツで絞り込む。
 struct StatsFilterBar: View {
     @Binding var filter: StatsFilter
     let years: [Int]
+    var tags: [String] = []
+    /// メンツ選びの候補。空ならメンツの絞り込みは出さない。
+    var candidates: [Participant] = []
+
+    @State private var showMemberPicker = false
 
     private var typeBinding: Binding<String> {
         Binding(get: { filter.gameType?.rawValue ?? "all" },
@@ -15,35 +20,153 @@ struct StatsFilterBar: View {
     }
 
     var body: some View {
-        HStack(spacing: Space.sm) {
-            Picker("種別", selection: typeBinding) {
-                Text("すべて").tag("all")
-                Text(GameType.yonma.displayName).tag(GameType.yonma.rawValue)
-                Text(GameType.sanma.displayName).tag(GameType.sanma.rawValue)
-            }
-            .pickerStyle(.segmented)
-
-            Menu {
-                Button { filter.year = nil } label: {
-                    if filter.year == nil { Label("全期間", systemImage: "checkmark") } else { Text("全期間") }
+        VStack(alignment: .leading, spacing: Space.sm) {
+            HStack(spacing: Space.sm) {
+                Picker("種別", selection: typeBinding) {
+                    Text("すべて").tag("all")
+                    Text(GameType.yonma.displayName).tag(GameType.yonma.rawValue)
+                    Text(GameType.sanma.displayName).tag(GameType.sanma.rawValue)
                 }
-                ForEach(years, id: \.self) { y in
-                    Button { filter.year = y } label: {
-                        if filter.year == y { Label("\(String(y))年", systemImage: "checkmark") } else { Text("\(String(y))年") }
+                .pickerStyle(.segmented)
+
+                Menu {
+                    Button { filter.year = nil } label: {
+                        if filter.year == nil { Label("全期間", systemImage: "checkmark") } else { Text("全期間") }
+                    }
+                    ForEach(years, id: \.self) { y in
+                        Button { filter.year = y } label: {
+                            if filter.year == y { Label("\(String(y))年", systemImage: "checkmark") } else { Text("\(String(y))年") }
+                        }
+                    }
+                } label: {
+                    pill(text: filter.year.map { "\(String($0))年" } ?? "全期間", icon: nil, active: filter.year != nil)
+                }
+            }
+
+            if !tags.isEmpty || !candidates.isEmpty || filter.tag != nil || !filter.memberIDs.isEmpty {
+                HStack(spacing: Space.sm) {
+                    if !tags.isEmpty || filter.tag != nil {
+                        Menu {
+                            Button { filter.tag = nil } label: {
+                                if filter.tag == nil { Label("すべてのタグ", systemImage: "checkmark") } else { Text("すべてのタグ") }
+                            }
+                            ForEach(tags, id: \.self) { t in
+                                Button { filter.tag = t } label: {
+                                    if filter.tag == t { Label(t, systemImage: "checkmark") } else { Text(t) }
+                                }
+                            }
+                        } label: {
+                            pill(text: filter.tag ?? "タグ：すべて", icon: "tag", active: filter.tag != nil)
+                        }
+                    }
+                    if !candidates.isEmpty {
+                        Button { showMemberPicker = true } label: {
+                            pill(text: memberLabel, icon: "person.2", active: !filter.memberIDs.isEmpty)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    Spacer(minLength: 0)
+                    if filter.tag != nil || !filter.memberIDs.isEmpty {
+                        Button {
+                            filter.tag = nil
+                            filter.memberIDs = []
+                        } label: {
+                            Text("解除").font(AppFont.body(13, weight: .semibold)).foregroundStyle(Theme.inkSecond)
+                                .frame(minWidth: 44, minHeight: 32)
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
-            } label: {
-                HStack(spacing: 4) {
-                    Text(filter.year.map { "\(String($0))年" } ?? "全期間")
-                        .font(AppFont.body(13, weight: .semibold))
-                    Image(systemName: "chevron.down").font(.system(size: 10, weight: .semibold))
-                }
-                .foregroundStyle(Theme.accent)
-                .padding(.horizontal, Space.md)
-                .frame(height: 32)
-                .background(RoundedRectangle(cornerRadius: Radius.small).fill(Theme.accent.opacity(0.10)))
             }
         }
+        .sheet(isPresented: $showMemberPicker) {
+            MemberPickerSheet(candidates: candidates, selected: filter.memberIDs) { filter.memberIDs = $0 }
+                .presentationDetents([.medium, .large])
+        }
+    }
+
+    private var memberLabel: String {
+        guard !filter.memberIDs.isEmpty else { return "メンツ：全員" }
+        let names = filter.memberIDs.compactMap { id in candidates.first { $0.id == id }?.name }
+        return names.count <= 3 ? names.joined(separator: "・") : "\(names.prefix(2).joined(separator: "・"))ほか\(names.count - 2)人"
+    }
+
+    private func pill(text: String, icon: String?, active: Bool) -> some View {
+        HStack(spacing: 4) {
+            if let icon { Image(systemName: icon).font(.system(size: 11, weight: .semibold)) }
+            Text(text).font(AppFont.body(13, weight: .semibold)).lineLimit(1)
+            Image(systemName: "chevron.down").font(.system(size: 10, weight: .semibold))
+        }
+        .foregroundStyle(active ? Color.white : Theme.accent)
+        .padding(.horizontal, Space.md)
+        .frame(height: 32)
+        .background(RoundedRectangle(cornerRadius: Radius.small)
+            .fill(active ? Theme.accent : Theme.accent.opacity(0.10)))
+    }
+}
+
+// MARK: - メンツ選び
+
+/// 集計に使うメンツを選ぶ。選んだ全員が入っているゲームだけを数える。
+struct MemberPickerSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let candidates: [Participant]
+    let onDone: ([UUID]) -> Void
+    @State private var picked: [UUID]
+
+    init(candidates: [Participant], selected: [UUID], onDone: @escaping ([UUID]) -> Void) {
+        self.candidates = candidates
+        self.onDone = onDone
+        _picked = State(initialValue: selected)
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: Space.md) {
+                    Text("選んだ人が全員そろったゲームだけを集計して、その人たちの成績を並べます。")
+                        .font(AppFont.body(13)).foregroundStyle(Theme.inkSecond)
+                    VStack(spacing: 0) {
+                        ForEach(Array(candidates.enumerated()), id: \.element.id) { idx, p in
+                            if idx > 0 { HairlineRule().padding(.leading, Space.lg) }
+                            Button { toggle(p.id) } label: {
+                                HStack(spacing: Space.md) {
+                                    PlayerDot(colorHex: p.colorHex, size: 12)
+                                    Text(p.name).font(AppFont.body(16)).foregroundStyle(Theme.ink)
+                                    Spacer()
+                                    Image(systemName: picked.contains(p.id) ? "checkmark.circle.fill" : "circle")
+                                        .font(.system(size: 20))
+                                        .foregroundStyle(picked.contains(p.id) ? Theme.accent : Theme.inkFaint)
+                                }
+                                .padding(.horizontal, Space.lg)
+                                .frame(minHeight: 48)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .background(RoundedRectangle(cornerRadius: Radius.card, style: .continuous).fill(Theme.card))
+                    .overlay(RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
+                        .stroke(Theme.rule, lineWidth: Theme.hairline))
+                }
+                .padding(Space.lg)
+            }
+            .background(NotePageBackground())
+            .navigationTitle("メンツで絞り込む")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("全員") { picked = [] }.disabled(picked.isEmpty)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("決定") { onDone(picked); dismiss() }
+                }
+            }
+        }
+    }
+
+    private func toggle(_ id: UUID) {
+        if let i = picked.firstIndex(of: id) { picked.remove(at: i) } else { picked.append(id) }
     }
 }
 
@@ -52,7 +175,16 @@ struct StatsFilterBar: View {
 struct PlayerStatsListView: View {
     @Query(sort: \TableSession.date, order: .reverse) private var sessions: [TableSession]
     @Query(sort: \Player.createdAt) private var players: [Player]
-    @State private var filter = StatsFilter()
+    @State private var filter: StatsFilter
+    private let title: String
+
+    /// - Parameters:
+    ///   - initialFilter: タグ別成績・最終結果から開くときの絞り込み
+    ///   - title: 画面タイトル
+    init(initialFilter: StatsFilter = StatsFilter(), title: String = "プレイヤー別成績") {
+        _filter = State(initialValue: initialFilter)
+        self.title = title
+    }
 
     private var games: [StatsGame] { sessions.map(StatsGame.init(session:)) }
     private var roster: [UUID: (name: String, colorHex: String)] {
@@ -66,18 +198,26 @@ struct PlayerStatsListView: View {
 
         ScrollView {
             VStack(alignment: .leading, spacing: Space.lg) {
-                StatsFilterBar(filter: $filter, years: PlayerStatsCalculator.availableYears(allGames))
+                StatsFilterBar(filter: $filter,
+                               years: PlayerStatsCalculator.availableYears(allGames),
+                               tags: PlayerStatsCalculator.availableTags(allGames),
+                               candidates: PlayerStatsCalculator.memberCandidates(
+                                   allGames, roster: players.map { ($0.id, $0.name, $0.colorHex) }))
 
                 if stats.isEmpty {
                     NoteCard {
                         EmptyNote(title: allGames.isEmpty ? "まだ記録がありません" : "該当するゲームがありません",
                                   message: allGames.isEmpty
                                     ? "ゲームを記録すると、プレイヤーごとの通算成績がここに集まります。"
-                                    : "種別や期間の絞り込みを変えてみてください。",
+                                    : (filter.memberIDs.isEmpty
+                                        ? "種別・期間・タグの絞り込みを変えてみてください。"
+                                        : "選んだメンツが全員そろったゲームがありません。メンツや種別を変えてみてください。"),
                                   systemImage: "person.crop.rectangle.stack")
                     }
                 } else {
-                    Text("\(gameCount)ゲームを集計・総合ポイント順")
+                    Text(filter.memberIDs.isEmpty
+                         ? "\(gameCount)ゲームを集計・総合ポイント順"
+                         : "このメンツがそろった\(gameCount)ゲームを集計・総合ポイント順")
                         .font(AppFont.body(13)).foregroundStyle(Theme.inkSecond)
 
                     VStack(spacing: Space.md) {
@@ -95,7 +235,7 @@ struct PlayerStatsListView: View {
             .padding(Space.lg)
         }
         .background(NotePageBackground())
-        .navigationTitle("プレイヤー別成績")
+        .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
     }
 
@@ -161,7 +301,11 @@ struct PlayerStatsDetailView: View {
 
         ScrollView {
             VStack(alignment: .leading, spacing: Space.xl) {
-                StatsFilterBar(filter: $filter, years: PlayerStatsCalculator.availableYears(allGames))
+                StatsFilterBar(filter: $filter,
+                               years: PlayerStatsCalculator.availableYears(allGames),
+                               tags: PlayerStatsCalculator.availableTags(allGames),
+                               candidates: PlayerStatsCalculator.memberCandidates(
+                                   allGames, roster: players.map { ($0.id, $0.name, $0.colorHex) }))
 
                 if let s = stats {
                     header(s)
@@ -174,7 +318,7 @@ struct PlayerStatsDetailView: View {
                 } else {
                     NoteCard {
                         EmptyNote(title: "該当するゲームがありません",
-                                  message: "種別や期間の絞り込みを変えてみてください。",
+                                  message: "種別・期間・タグ・メンツの絞り込みを変えてみてください。",
                                   systemImage: "chart.bar.xaxis")
                     }
                 }

@@ -10,10 +10,12 @@ struct SavedRule: Codable, Identifiable, Equatable {
     var rule: GameRule = GameRule()
     var pointCoefficientPer1000: Double = AppDefaults.pointCoefficientPer1000
     var chipPointCoefficient: Double = AppDefaults.chipPointCoefficient
+    /// 呼び出したゲームに自動で付けるタグ（1.5.0 から）。タグ別成績とつなげるため。
+    var tags: [String] = []
     var createdAt: Date = Date()
 
     enum CodingKeys: String, CodingKey {
-        case id, name, gameTypeRaw, inputModeRaw, rule, pointCoefficientPer1000, chipPointCoefficient, createdAt
+        case id, name, gameTypeRaw, inputModeRaw, rule, pointCoefficientPer1000, chipPointCoefficient, tags, createdAt
     }
 
     var gameType: GameType { GameType(rawValue: gameTypeRaw) ?? .yonma }
@@ -21,7 +23,7 @@ struct SavedRule: Codable, Identifiable, Equatable {
 
     init(id: UUID = UUID(), name: String, gameType: GameType, inputMode: InputMode,
          rule: GameRule, pointCoefficientPer1000: Double, chipPointCoefficient: Double,
-         createdAt: Date = Date()) {
+         tags: [String] = [], createdAt: Date = Date()) {
         self.id = id
         self.name = name
         self.gameTypeRaw = gameType.rawValue
@@ -29,6 +31,7 @@ struct SavedRule: Codable, Identifiable, Equatable {
         self.rule = rule
         self.pointCoefficientPer1000 = pointCoefficientPer1000
         self.chipPointCoefficient = chipPointCoefficient
+        self.tags = tags
         // 保存（iso8601）で秒未満が落ちるので、最初から秒単位にそろえて前後で同じ値にする。
         self.createdAt = Date(timeIntervalSince1970: createdAt.timeIntervalSince1970.rounded(.down))
     }
@@ -50,7 +53,7 @@ struct SavedRule: Codable, Identifiable, Equatable {
         return parts.joined(separator: "・")
     }
 
-    /// 中身（名前・ID・作成日以外）が同じか。新規ゲーム画面で「選択中」表示に使う。
+    /// 中身（名前・ID・作成日・タグ以外）が同じか。新規ゲーム画面で「選択中」表示に使う。
     func matches(gameType: GameType, inputMode: InputMode, rule: GameRule,
                  pointCoefficientPer1000: Double, chipPointCoefficient: Double) -> Bool {
         guard self.gameType == gameType,
@@ -75,6 +78,7 @@ extension SavedRule {
             ?? AppDefaults.pointCoefficientPer1000
         chipPointCoefficient = try c.decodeIfPresent(Double.self, forKey: .chipPointCoefficient)
             ?? AppDefaults.chipPointCoefficient
+        tags = try c.decodeIfPresent([String].self, forKey: .tags) ?? []
         createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
     }
 }
@@ -140,6 +144,13 @@ enum SavedRuleStore {
     }
 
     /// まだ使っていない「マイルール1」「マイルール2」…の名前。
+    /// タグの入力を整える（前後の空白を除き、空・重複を落とす）。
+    static func normalizedTags(_ tags: [String]) -> [String] {
+        var seen = Set<String>()
+        return tags.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty && seen.insert($0).inserted }
+    }
+
     static func suggestedName(existing: [SavedRule]) -> String {
         let names = Set(existing.map(\.name))
         var i = existing.count + 1

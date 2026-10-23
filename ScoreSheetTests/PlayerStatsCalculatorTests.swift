@@ -166,4 +166,63 @@ final class PlayerStatsCalculatorTests: XCTestCase {
         XCTAssertEqual(sa.opponentRecords[b.id]?.name, "びー")
         XCTAssertEqual(sa.opponentRecords[b.id]?.games, 1)
     }
+
+    // MARK: タグ・メンツで絞り込む
+
+    private func tagged(_ g: StatsGame, _ tags: [String]) -> StatsGame {
+        var copy = g
+        copy.tags = tags
+        return copy
+    }
+
+    func testFilterByTag() {
+        let games = [tagged(yonmaGame, ["金曜会"]), tagged(sanmaGame, ["旅行", "金曜会"])]
+        let friday = PlayerStatsCalculator.aggregate(games: games, filter: StatsFilter(tag: "金曜会"))
+        XCTAssertEqual(friday.first { $0.id == a.id }?.games, 2)
+
+        let trip = PlayerStatsCalculator.aggregate(games: games, filter: StatsFilter(tag: "旅行"))
+        XCTAssertEqual(trip.count, 3)
+        XCTAssertNil(trip.first { $0.id == d.id })
+
+        XCTAssertTrue(PlayerStatsCalculator.aggregate(games: games, filter: StatsFilter(tag: "なし")).isEmpty)
+        XCTAssertEqual(PlayerStatsCalculator.availableTags(games), ["金曜会", "旅行"])   // 多い順
+    }
+
+    func testFilterByMembersCountsOnlyGamesWithEveryoneAndShowsOnlyThem() throws {
+        let games = [yonmaGame, sanmaGame]
+
+        // A・B・C がそろったのは両方のゲーム。D は出さない。
+        let abc = PlayerStatsCalculator.aggregate(games: games, filter: StatsFilter(memberIDs: [a.id, b.id, c.id]))
+        XCTAssertEqual(Set(abc.map(\.id)), [a.id, b.id, c.id])
+        XCTAssertEqual(try XCTUnwrap(abc.first { $0.id == a.id }).games, 2)
+        XCTAssertEqual(try XCTUnwrap(abc.first { $0.id == a.id }).grandTotal, 2250)
+
+        // D が入るのは四麻だけ。
+        let withD = PlayerStatsCalculator.aggregate(games: games, filter: StatsFilter(memberIDs: [a.id, d.id]))
+        XCTAssertEqual(Set(withD.map(\.id)), [a.id, d.id])
+        XCTAssertEqual(withD.first { $0.id == a.id }?.games, 1)
+        XCTAssertEqual(withD.first { $0.id == a.id }?.grandTotal, 250)
+
+        // 種別と組み合わせる：三麻で A・D はそろっていない。
+        let none = PlayerStatsCalculator.aggregate(games: games,
+                                                   filter: StatsFilter(gameType: .sanma, memberIDs: [a.id, d.id]))
+        XCTAssertTrue(none.isEmpty)
+    }
+
+    func testMemberCandidatesOnlyPeopleInRecordsRosterFirst() {
+        let outsider = Participant(name: "Z", colorHex: "000000")
+        let rosterOnly = (id: UUID(), name: "記録なし", colorHex: "000000")
+        let candidates = PlayerStatsCalculator.memberCandidates(
+            [yonmaGame, sanmaGame],
+            roster: [(id: c.id, name: "しー", colorHex: "333333"), rosterOnly])
+        XCTAssertEqual(candidates.first?.name, "しー")                  // 名簿の名前で先頭
+        XCTAssertFalse(candidates.contains { $0.id == rosterOnly.id })  // 記録が無い人は出さない
+        XCTAssertEqual(Set(candidates.map(\.id)), [a.id, b.id, c.id, d.id])
+        XCTAssertFalse(candidates.contains { $0.id == outsider.id })
+    }
+
+    func testSessionTagsCarryIntoStatsGame() {
+        let session = TableSession(gameType: .sanma, participants: [a, b, c], tags: ["金曜会"])
+        XCTAssertEqual(StatsGame(session: session).tags, ["金曜会"])
+    }
 }

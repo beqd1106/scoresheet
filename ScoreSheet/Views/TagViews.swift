@@ -183,7 +183,7 @@ struct GameSettingsSheet: View {
                 Button("キャンセル", role: .cancel) {}
                 Button("保存") { saveAsRule() }
             } message: {
-                Text("次の新規ゲームから呼び出せます。同じ名前があれば上書きします。")
+                Text("次の新規ゲームから呼び出せます。このゲームのタグも一緒に保存され、呼び出したゲームに自動で付きます。同じ名前があれば上書きします。")
             }
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -249,7 +249,8 @@ struct GameSettingsSheet: View {
         let item = SavedRule(name: name, gameType: session.gameType, inputMode: session.inputMode,
                              rule: session.rule,
                              pointCoefficientPer1000: session.pointCoefficientPer1000,
-                             chipPointCoefficient: session.chipPointCoefficient)
+                             chipPointCoefficient: session.chipPointCoefficient,
+                             tags: session.tags)
         let result = SavedRuleStore.upsert(item, into: SavedRuleStore.decode(savedRulesJSON))
         savedRulesJSON = SavedRuleStore.encode(result.rules)
         savedNotice = result.replaced ? "「\(name)」を上書きしました。" : "「\(name)」を保存しました。"
@@ -279,7 +280,9 @@ struct TagListView: View {
             } else {
                 VStack(spacing: Space.md) {
                     ForEach(tagCounts, id: \.tag) { item in
-                        NavigationLink { TagSummaryView(tag: item.tag) } label: {
+                        NavigationLink {
+                            PlayerStatsListView(initialFilter: StatsFilter(tag: item.tag), title: item.tag)
+                        } label: {
                             NoteCard {
                                 HStack(spacing: Space.md) {
                                     Image(systemName: "tag").foregroundStyle(Theme.accent)
@@ -299,91 +302,5 @@ struct TagListView: View {
         .background(NotePageBackground())
         .navigationTitle("タグ別成績")
         .navigationBarTitleDisplayMode(.inline)
-    }
-}
-
-// MARK: - タグ別集計
-
-struct TagSummaryView: View {
-    let tag: String
-    @Query(sort: \TableSession.date, order: .reverse) private var allSessions: [TableSession]
-
-    // tags は Codable 配列属性のため #Predicate では検索できない。Swift 側で絞り込む。
-    private var sessions: [TableSession] { allSessions.filter { $0.tags.contains(tag) } }
-
-    init(tag: String) { self.tag = tag }
-
-    private struct Agg: Identifiable {
-        let id: UUID
-        var name: String
-        var colorHex: String
-        var totalGrand: Int
-        var sumAvgRank: Double
-        var games: Int
-        var topCount: Int
-        var avgRank: Double { games == 0 ? 0 : sumAvgRank / Double(games) }
-    }
-
-    private var aggregates: [Agg] {
-        var dict: [UUID: Agg] = [:]
-        for s in sessions {
-            for r in ScoreCalculator.finalResults(for: s) {
-                var a = dict[r.participantID] ?? Agg(id: r.participantID, name: r.name, colorHex: r.colorHex,
-                                                     totalGrand: 0, sumAvgRank: 0, games: 0, topCount: 0)
-                a.name = r.name; a.colorHex = r.colorHex
-                a.totalGrand += r.grandTotal
-                a.sumAvgRank += r.averageRank
-                a.games += 1
-                a.topCount += r.topCount
-                dict[r.participantID] = a
-            }
-        }
-        return dict.values.sorted { $0.totalGrand > $1.totalGrand }
-    }
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: Space.md) {
-                Text("\(sessions.count)ゲームの合算").font(AppFont.body(13)).foregroundStyle(Theme.inkSecond)
-                ForEach(Array(aggregates.enumerated()), id: \.element.id) { idx, a in
-                    NoteCard {
-                        VStack(spacing: Space.md) {
-                            HStack(spacing: Space.md) {
-                                RankBadge(rank: idx + 1, size: 30)
-                                PlayerDot(colorHex: a.colorHex, size: 11)
-                                Text(a.name).font(AppFont.body(17, weight: .semibold)).foregroundStyle(Theme.ink)
-                                Spacer()
-                                Text(a.totalGrand.signedPointString)
-                                    .font(AppFont.number(24, weight: .bold))
-                                    .foregroundStyle(Theme.pointColor(a.totalGrand))
-                            }
-                            HairlineRule()
-                            HStack {
-                                cell("ゲーム数", "\(a.games)")
-                                divider
-                                cell("平均順位", String(format: "%.2f", a.avgRank))
-                                divider
-                                cell("トップ", "\(a.topCount)回")
-                            }
-                        }
-                    }
-                }
-            }
-            .padding(Space.lg)
-        }
-        .background(NotePageBackground())
-        .navigationTitle(tag)
-        .navigationBarTitleDisplayMode(.inline)
-    }
-
-    private func cell(_ t: String, _ v: String) -> some View {
-        VStack(spacing: 3) {
-            Text(t).font(AppFont.body(11)).foregroundStyle(Theme.inkFaint)
-            Text(v).font(AppFont.number(15, weight: .semibold)).foregroundStyle(Theme.ink)
-        }
-        .frame(maxWidth: .infinity)
-    }
-    private var divider: some View {
-        Rectangle().fill(Theme.rule).frame(width: Theme.hairline, height: 26)
     }
 }

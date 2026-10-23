@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 // MARK: - 保存したルールの一覧（設定から開く）
 
@@ -54,7 +55,7 @@ struct SavedRulesView: View {
                         }
                         .onMove(perform: move)
                     } footer: {
-                        Text("★「いつもの」にしたルールは、新規ゲームを開いたとき最初から選ばれます。左へスワイプで削除、右へスワイプで「いつもの」の切り替え。")
+                        Text("「いつもの」にしたルールは、新規ゲームを開いたとき最初から選ばれます。ルールにタグを付けておくと、呼び出したゲームにそのタグが自動で付き、タグ別成績でまとめて見られます。左へスワイプで削除、右へスワイプで「いつもの」の切り替え。")
                             .font(AppFont.body(12)).foregroundStyle(Theme.inkFaint)
                     }
                 }
@@ -111,6 +112,11 @@ struct SavedRulesView: View {
                 Text(saved.summary)
                     .font(AppFont.body(12)).foregroundStyle(Theme.inkSecond)
                     .lineLimit(2)
+                if !saved.tags.isEmpty {
+                    FlowLayout(spacing: Space.xs) {
+                        ForEach(saved.tags, id: \.self) { TagChip(text: $0) }
+                    }
+                }
             }
             Spacer(minLength: Space.sm)
             Image(systemName: "chevron.right")
@@ -153,6 +159,8 @@ struct SavedRulesView: View {
 
 struct SavedRuleEditSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Query private var sessions: [TableSession]
+    @State private var newTag = ""
 
     let original: SavedRule?
     let existing: [SavedRule]
@@ -209,6 +217,8 @@ struct SavedRuleEditSheet: View {
                         }
                     }
 
+                    tagSection
+
                     VStack(alignment: .leading, spacing: Space.md) {
                         SectionLabel(text: "種別")
                         Picker("種別", selection: gameTypeBinding) {
@@ -260,6 +270,7 @@ struct SavedRuleEditSheet: View {
                     Button("保存") {
                         var item = draft
                         item.name = trimmedName
+                        item.tags = SavedRuleStore.normalizedTags(item.tags)
                         onSave(item)
                         dismiss()
                     }
@@ -267,6 +278,56 @@ struct SavedRuleEditSheet: View {
                 }
             }
         }
+    }
+
+    // MARK: タグ
+
+    /// これまでのゲームで使ったタグのうち、まだ付けていないもの。
+    private var tagSuggestions: [String] {
+        let used = Set(draft.tags)
+        return Array(Set(sessions.flatMap(\.tags)).subtracting(used)).sorted()
+    }
+
+    private var tagSection: some View {
+        VStack(alignment: .leading, spacing: Space.md) {
+            SectionLabel(text: "タグ（任意）")
+            Text("このルールで始めたゲームに自動で付きます。タグ別成績でまとめて見られます。")
+                .font(AppFont.body(12)).foregroundStyle(Theme.inkFaint)
+            if !draft.tags.isEmpty {
+                FlowLayout {
+                    ForEach(draft.tags, id: \.self) { t in
+                        TagChip(text: t) { draft.tags.removeAll { $0 == t } }
+                    }
+                }
+            }
+            HStack(spacing: Space.sm) {
+                TextField("例：金曜会", text: $newTag)
+                    .textFieldStyle(.plain).padding(Space.md)
+                    .background(RoundedRectangle(cornerRadius: Radius.control).fill(Theme.sunken))
+                    .onSubmit { addTag(newTag) }
+                Button { addTag(newTag) } label: {
+                    Image(systemName: "plus").font(.system(size: 16, weight: .semibold))
+                        .frame(width: 44, height: 44).foregroundStyle(.white)
+                        .background(RoundedRectangle(cornerRadius: Radius.control).fill(Theme.accent))
+                }
+                .disabled(newTag.trimmingCharacters(in: .whitespaces).isEmpty)
+                .accessibilityLabel("タグを追加")
+            }
+            if !tagSuggestions.isEmpty {
+                FlowLayout {
+                    ForEach(tagSuggestions, id: \.self) { t in
+                        Button { addTag(t) } label: { TagChip(text: t) }
+                    }
+                }
+            }
+        }
+    }
+
+    private func addTag(_ text: String) {
+        let v = text.trimmingCharacters(in: .whitespaces)
+        newTag = ""
+        guard !v.isEmpty, !draft.tags.contains(v) else { return }
+        draft.tags.append(v)
     }
 
     private func coeffRow(_ title: String, _ value: Binding<Double>, _ step: Double, _ maxV: Double) -> some View {

@@ -123,4 +123,33 @@ final class SavedRuleTests: XCTestCase {
         let file = try BackupService.decode(Data(json.utf8))
         XCTAssertNil(file.savedRules)
     }
+
+    // MARK: タグ
+
+    func testTagsRoundTripAndOldDataHasNoTags() {
+        var r = sample("金曜")
+        r.tags = ["金曜会"]
+        SavedRuleStore.save([r], defaults)
+        XCTAssertEqual(SavedRuleStore.load(defaults).first?.tags, ["金曜会"])
+        XCTAssertEqual(SavedRuleStore.decode(#"[{"name":"古い"}]"#).first?.tags, [])
+        XCTAssertEqual(SavedRuleStore.normalizedTags([" 金曜会 ", "", "金曜会", "旅行"]), ["金曜会", "旅行"])
+    }
+
+    func testApplyAddsRuleTagsAndSwitchingKeepsManualTags() {
+        var friday = sample("金曜")
+        friday.tags = ["金曜会", "雀荘A"]
+        var trip = sample("旅行")
+        trip.tags = ["旅行"]
+
+        let vm = TableSetupViewModel()
+        vm.tags = ["手で付けた", "雀荘A"]
+        vm.apply(friday)
+        XCTAssertEqual(vm.tags, ["手で付けた", "雀荘A", "金曜会"])   // 重複は足さない
+
+        vm.apply(trip)
+        // ルールから付いた「金曜会」だけ外れ、手で付けたタグは残る。
+        XCTAssertEqual(vm.tags, ["手で付けた", "雀荘A", "旅行"])
+        XCTAssertTrue(vm.isCurrent(trip))                              // タグは「選択中」判定に使わない
+        XCTAssertEqual(vm.makeSavedRule(name: "今").tags, ["手で付けた", "雀荘A", "旅行"])
+    }
 }

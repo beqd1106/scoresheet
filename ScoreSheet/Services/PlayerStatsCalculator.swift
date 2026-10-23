@@ -16,6 +16,7 @@ struct StatsGame: Identifiable, Equatable {
     /// 対局ポイントの生合計（係数をかける前）。
     var roundPointTotals: [UUID: Int]
     var chipCounts: [UUID: Int]
+    var tags: [String] = []
 }
 
 extension StatsGame {
@@ -33,6 +34,7 @@ extension StatsGame {
         roundPointTotals = Dictionary(results.map { ($0.participantID, $0.roundPointTotal) }, uniquingKeysWith: { a, _ in a })
         chipCounts = Dictionary(session.participants.map { ($0.id, session.chipCount(for: $0.id)) },
                                 uniquingKeysWith: { a, _ in a })
+        tags = session.tags
     }
 }
 
@@ -40,10 +42,18 @@ extension StatsGame {
 struct StatsFilter: Equatable {
     var gameType: GameType? = nil   // nil = 三麻・四麻すべて
     var year: Int? = nil            // nil = 全期間
+    var tag: String? = nil          // nil = タグを問わない
+    /// メンツ。空なら全員。指定した全員が入っているゲームだけを数え、成績もこの人たちだけ出す。
+    var memberIDs: [UUID] = []
 
     func includes(_ game: StatsGame, calendar: Calendar = .current) -> Bool {
         if let gameType, game.gameType != gameType { return false }
         if let year, calendar.component(.year, from: game.date) != year { return false }
+        if let tag, !game.tags.contains(tag) { return false }
+        if !memberIDs.isEmpty {
+            let ids = Set(game.participants.map(\.id))
+            if !memberIDs.allSatisfy(ids.contains) { return false }
+        }
         return true
     }
 }
@@ -155,10 +165,11 @@ enum PlayerStatsCalculator {
             .sorted { $0.date < $1.date }
 
         var stats: [UUID: PlayerStats] = [:]
+        let members = Set(filter.memberIDs)
 
         for game in target {
             let n = game.participants.count
-            for p in game.participants {
+            for p in game.participants where members.isEmpty || members.contains(p.id) {
                 var s = stats[p.id] ?? PlayerStats(id: p.id,
                                                    name: roster[p.id]?.name ?? p.name,
                                                    colorHex: roster[p.id]?.colorHex ?? p.colorHex)
@@ -238,6 +249,29 @@ enum PlayerStatsCalculator {
     /// 絞り込みの選択肢に出す年（新しい順）。
     static func availableYears(_ games: [StatsGame], calendar: Calendar = .current) -> [Int] {
         Array(Set(games.map { calendar.component(.year, from: $0.date) })).sorted(by: >)
+    }
+
+    /// 絞り込みの選択肢に出すタグ（使われている回数の多い順）。
+    static func availableTags(_ games: [StatsGame]) -> [String] {
+        var counts: [String: Int] = [:]
+        for g in games { for t in Set(g.tags) { counts[t, default: 0] += 1 } }
+        return counts.sorted { a, b in a.value != b.value ? a.value > b.value : a.key < b.key }.map(\.key)
+    }
+
+    /// メンツ選びの候補（記録に出てくる人だけ）。名簿の人を名簿順に先に、名簿にいない人を後ろに並べる。
+    static func memberCandidates(_ games: [StatsGame],
+                                 roster: [(id: UUID, name: String, colorHex: String)]) -> [Participant] {
+        let appeared = Set(games.flatMap { $0.participants.map(\.id) })
+        var list = roster.filter { appeared.contains($0.id) }
+            .map { Participant(id: $0.id, name: $0.name, colorHex: $0.colorHex) }
+        var seen = Set(list.map(\.id))
+        for g in games.sorted(by: { $0.date > $1.date }) {
+            for p in g.participants where !seen.contains(p.id) {
+                list.append(p)
+                seen.insert(p.id)
+            }
+        }
+        return list
     }
 }
 

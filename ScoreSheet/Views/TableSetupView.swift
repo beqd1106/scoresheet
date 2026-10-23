@@ -176,7 +176,7 @@ struct TableSetupView: View {
                 Button("キャンセル", role: .cancel) {}
                 Button("保存") { saveCurrentRule() }
             } message: {
-                Text("種別・入力方式・ルール・係数をまとめて保存します。同じ名前があれば上書きします。")
+                Text("種別・入力方式・ルール・係数・タグをまとめて保存します。呼び出すとタグも自動で付きます。同じ名前があれば上書きします。")
             }
         }
     }
@@ -244,6 +244,12 @@ struct TableSetupView: View {
                 Text("\(saved.gameType.displayName)・\(saved.inputMode == .rawScore ? "素点" : "ポイント")")
                     .font(AppFont.body(11))
                     .foregroundStyle(active ? Color.white.opacity(0.85) : Theme.inkFaint)
+                if !saved.tags.isEmpty {
+                    Label(saved.tags.joined(separator: "・"), systemImage: "tag")
+                        .font(AppFont.body(11, weight: .medium))
+                        .foregroundStyle(active ? Color.white : Theme.accent)
+                        .lineLimit(1)
+                }
             }
             .padding(.horizontal, Space.md)
             .padding(.vertical, Space.sm)

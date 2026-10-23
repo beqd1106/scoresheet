@@ -4,10 +4,13 @@ import SwiftData
 struct PlayerListView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \Player.createdAt) private var players: [Player]
+    @Query private var sessions: [TableSession]
 
     @State private var newName = ""
     @State private var editingPlayer: Player? = nil
     @State private var toDelete: Player? = nil
+    @State private var deleteMessage: String?
+    @State private var deleteFailed = false
 
     var body: some View {
         ScrollView {
@@ -33,6 +36,11 @@ struct PlayerListView: View {
                 // 一覧
                 VStack(alignment: .leading, spacing: Space.md) {
                     SectionLabel(text: "プレイヤー（\(players.count)人）")
+                    if let deleteMessage {
+                        Text(deleteMessage)
+                            .font(AppFont.body(12))
+                            .foregroundStyle(deleteFailed ? Theme.accentRed : Theme.accent)
+                    }
                     if players.isEmpty {
                         Text("まだプレイヤーがいません。").font(AppFont.body(14)).foregroundStyle(Theme.inkSecond)
                     }
@@ -52,15 +60,48 @@ struct PlayerListView: View {
         .navigationTitle("プレイヤー")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $editingPlayer) { p in PlayerEditSheet(player: p) }
-        .confirmationDialog("このプレイヤーを削除しますか？（過去の記録は残ります）", isPresented: Binding(
+        .confirmationDialog(deleteTitle, isPresented: Binding(
             get: { toDelete != nil }, set: { if !$0 { toDelete = nil } }
         ), titleVisibility: .visible) {
-            Button("削除する", role: .destructive) {
-                if let p = toDelete { context.delete(p); try? context.save() }
-                toDelete = nil
+            if let p = toDelete {
+                let count = gameCount(p)
+                Button("名簿から外す（記録は残す）", role: .destructive) { delete(p, .rosterOnly) }
+                if count > 0 {
+                    Button("記録だけ消す（\(count)ゲーム）", role: .destructive) { delete(p, .gamesOnly) }
+                    Button("名簿も記録も消す（\(count)ゲーム）", role: .destructive) { delete(p, .gamesAndRoster) }
+                }
             }
             Button("キャンセル", role: .cancel) { toDelete = nil }
+        } message: {
+            if let p = toDelete, gameCount(p) > 0 {
+                Text("記録を消すと、\(p.name)さんが入ったゲームが丸ごと消え、同じゲームにいた人の記録からもなくなります。消す前の状態は設定の「自動バックアップ」から戻せます。")
+            } else {
+                Text("名簿から外しても、過去のゲームの記録は残ります。")
+            }
         }
+    }
+
+    private var deleteTitle: String { "\(toDelete?.name ?? "")さんを削除" }
+
+    private func gameCount(_ player: Player) -> Int {
+        DataResetService.sessions(involving: player.id, in: sessions).count
+    }
+
+    private func delete(_ player: Player, _ scope: DataResetService.PlayerScope) {
+        let name = player.name
+        do {
+            let summary = try DataResetService.deletePlayer(player, scope: scope, context: context)
+            deleteFailed = false
+            switch scope {
+            case .rosterOnly:     deleteMessage = "\(name)さんを名簿から外しました。"
+            case .gamesOnly:      deleteMessage = "\(name)さんが入ったゲーム\(summary.deletedSessions)件を消しました。"
+            case .gamesAndRoster: deleteMessage = "\(name)さんと、入っていたゲーム\(summary.deletedSessions)件を消しました。"
+            }
+        } catch {
+            deleteFailed = true
+            deleteMessage = "削除できませんでした。もう一度お試しください。"
+        }
+        toDelete = nil
     }
 
     private func playerRow(_ player: Player) -> some View {
@@ -81,6 +122,7 @@ struct PlayerListView: View {
             Button { toDelete = player } label: {
                 Image(systemName: "trash").foregroundStyle(Theme.negative)
             }
+            .accessibilityLabel("\(player.name)を削除")
         }
         .padding(Space.lg)
     }

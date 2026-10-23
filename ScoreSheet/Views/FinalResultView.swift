@@ -29,6 +29,32 @@ struct FinalResultView: View {
                         }
                     }
                 }
+
+                // 同じメンツの通算
+                NavigationLink {
+                    PlayerStatsListView(
+                        initialFilter: StatsFilter(gameType: session.gameType,
+                                                   memberIDs: session.participants.map(\.id)),
+                        title: "このメンツの通算")
+                } label: {
+                    NoteCard(padding: Space.md) {
+                        HStack(spacing: Space.md) {
+                            Image(systemName: "person.3")
+                                .font(.system(size: 16)).foregroundStyle(Theme.mutedBlue)
+                                .frame(width: 28)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("このメンツの通算成績")
+                                    .font(AppFont.body(15, weight: .semibold)).foregroundStyle(Theme.ink)
+                                Text("同じ顔ぶれがそろったゲームをすべて合算します")
+                                    .font(AppFont.body(12)).foregroundStyle(Theme.inkSecond)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.inkFaint)
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
             }
             .padding(Space.lg)
         }
