@@ -118,14 +118,26 @@ struct TableScoreView: View {
         }
         .onChange(of: session.ruleJSON) { _, _ in ruleCache = session.rule }
         .onChange(of: session.inputModeRaw) { _, _ in reloadFromSession() }
-        .onChange(of: rows) { _, _ in if loaded { scheduleSave() } }
-        .onChange(of: yakitori) { _, _ in if loaded { scheduleSave() } }
-        .onChange(of: busters) { _, _ in if loaded { scheduleSave() } }
-        .onChange(of: chipText) { _, _ in if loaded { scheduleSave() } }
-        .onChange(of: sitOut) { _, _ in if loaded { scheduleSave() } }
-        // アプリが背面に回る・画面を離れるタイミングでは待たずに保存する。
-        .onChange(of: scenePhase) { _, phase in if phase != .active { saveNow() } }
-        .onDisappear { saveNow() }
+        .modifier(AutoSaveTriggers(input: currentInput, loaded: loaded, scenePhase: scenePhase,
+                                    onChange: scheduleSave, onLeave: saveNow))
+    }
+
+    /// 入力が変わるたびの保存と、背面移行・画面離脱時の保存。
+    /// body の修飾子が長いと型チェックが終わらなくなるため、ここへまとめている。
+    private struct AutoSaveTriggers: ViewModifier {
+        let input: ScoreTableInput
+        let loaded: Bool
+        let scenePhase: ScenePhase
+        let onChange: () -> Void
+        let onLeave: () -> Void
+
+        func body(content: Content) -> some View {
+            content
+                .onChange(of: input) { _, _ in if loaded { onChange() } }
+                // アプリが背面に回る・画面を離れるタイミングでは待たずに保存する。
+                .onChange(of: scenePhase) { _, phase in if phase != .active { onLeave() } }
+                .onDisappear { onLeave() }
+        }
     }
 
     // MARK: ゲームヘッダー（モード・ルール・係数・タグ）
@@ -498,15 +510,21 @@ struct TableScoreView: View {
             }
             ForEach(Array(participants.enumerated()), id: \.element.id) { idx, p in
                 gridCell(width: colW, height: rowH, showRight: idx < n - 1) {
-                    if isSitOut(r, idx) {
-                        sitOutCell(r)
-                    } else {
-                        cellContent(r, idx, settlement: settlements?.first { $0.participantID == p.id })
-                    }
+                    playerCell(r, idx, settlement: settlements?.first { $0.participantID == p.id })
                 }
             }
         }
         .background((warn ?? .clear).opacity(warn == nil ? 0 : 0.10))
+    }
+
+    /// 1マス分。回し打ちの抜け番なら「抜け」を出す。
+    @ViewBuilder
+    private func playerCell(_ r: Int, _ c: Int, settlement: RoundSettlement?) -> some View {
+        if isSitOut(r, c) {
+            sitOutCell(r)
+        } else {
+            cellContent(r, c, settlement: settlement)
+        }
     }
 
     /// 回戦ラベル。タップで削除・ヤキトリ指定のメニュー。
