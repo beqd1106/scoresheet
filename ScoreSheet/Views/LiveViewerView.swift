@@ -226,7 +226,7 @@ struct LiveViewerView: View {
             HStack(alignment: .firstTextBaseline) {
                 SectionLabel(text: "現在の順位", systemImage: "list.number")
                 Spacer()
-                Text("\(session.gameType.displayName)・\(played)回戦終了")
+                Text("\(session.displayTitle)・\(played)回戦終了")
                     .font(AppFont.body(12))
                     .foregroundStyle(Theme.inkFaint)
             }
@@ -292,11 +292,15 @@ struct LiveViewerView: View {
                     ForEach(Array(rounds.enumerated()), id: \.element.id) { i, round in
                         gridLine
                         tableRowView(label: "\(i + 1)", labelW: labelW, colW: colW, height: 40) { p in
-                            let v = round.point(for: p.id)
-                            Text(v.signedPointString)
-                                .font(AppFont.number(15, weight: .semibold))
-                                .foregroundStyle(Theme.pointColor(v))
-                                .lineLimit(1).minimumScaleFactor(0.6)
+                            if session.sitOutID(in: round) == p.id {
+                                Text("抜け").font(AppFont.body(12, weight: .semibold)).foregroundStyle(Theme.inkFaint)
+                            } else {
+                                let v = round.point(for: p.id)
+                                Text(v.signedPointString)
+                                    .font(AppFont.number(15, weight: .semibold))
+                                    .foregroundStyle(Theme.pointColor(v))
+                                    .lineLimit(1).minimumScaleFactor(0.6)
+                            }
                         }
                     }
                     gridLine

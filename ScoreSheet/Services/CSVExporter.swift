@@ -10,7 +10,7 @@ enum CSVExporter {
         var lines: [String] = []
         lines.append("スコアシート エクスポート")
         lines.append("日付,\(df.string(from: session.date))")
-        lines.append("種別,\(session.gameType.displayName)")
+        lines.append("種別,\(session.displayTitle)")
         lines.append("入力方式,\(session.inputMode.displayName)")
         if session.inputMode == .rawScore {
             let rule = session.rule
@@ -33,7 +33,9 @@ enum CSVExporter {
 
         for round in session.sortedRounds {
             var row = ["\(round.roundNumber)回戦"]
-            row += parts.map { "\(round.point(for: $0.id).signedPointString)" }
+            row += parts.map { p in
+                session.sitOutID(in: round) == p.id ? "抜け" : "\(round.point(for: p.id).signedPointString)"
+            }
             row.append("\(round.pointSum)")
             lines.append(row.joined(separator: ","))
         }

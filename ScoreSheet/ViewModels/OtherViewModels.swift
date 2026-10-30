@@ -24,7 +24,7 @@ final class TableScoreViewModel {
 final class HomeViewModel {
     func summary(for session: TableSession) -> String {
         let names = session.participants.map(\.name).joined(separator: "・")
-        return "\(session.gameType.displayName)・\(session.rounds.count)回戦　\(names)"
+        return "\(session.displayTitle)・\(session.rounds.count)回戦　\(names)"
     }
 }
 

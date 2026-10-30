@@ -168,7 +168,7 @@ enum PlayerStatsCalculator {
         let members = Set(filter.memberIDs)
 
         for game in target {
-            let n = game.participants.count
+            let n = game.gameType.playerCount   // ラスの判定は卓の人数で（回し打ちでも 3 or 4）
             for p in game.participants where members.isEmpty || members.contains(p.id) {
                 var s = stats[p.id] ?? PlayerStats(id: p.id,
                                                    name: roster[p.id]?.name ?? p.name,

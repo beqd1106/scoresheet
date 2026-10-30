@@ -20,6 +20,8 @@ struct TableScoreView: View {
     /// busters[roundIndex][playerIndex] = その人を飛ばした人（トビ罰符の受取先）。
     @State private var busters: [[UUID?]] = []
     @State private var chipText: [String] = []
+    /// sitOut[roundIndex] = 回し打ちでその回戦に抜ける人（回し打ちでなければ nil）。
+    @State private var sitOut: [UUID?] = []
     @State private var loaded = false
     @State private var showSettings = false
     @State private var showRules = false
@@ -42,6 +44,7 @@ struct TableScoreView: View {
     private var participants: [Participant] { session.participants }
     private var n: Int { participants.count }
     private var isRaw: Bool { session.inputMode == .rawScore }
+    private var isRotation: Bool { session.isRotation }
     /// ルールは JSON から復元するため、描画のたびに解析しないようキャッシュする。
     private var rule: GameRule { ruleCache ?? session.rule }
 
@@ -84,7 +87,7 @@ struct TableScoreView: View {
             }
         }
         .background(NotePageBackground())
-        .navigationTitle(session.gameType.displayName)
+        .navigationTitle(session.displayTitle)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -119,6 +122,7 @@ struct TableScoreView: View {
         .onChange(of: yakitori) { _, _ in if loaded { scheduleSave() } }
         .onChange(of: busters) { _, _ in if loaded { scheduleSave() } }
         .onChange(of: chipText) { _, _ in if loaded { scheduleSave() } }
+        .onChange(of: sitOut) { _, _ in if loaded { scheduleSave() } }
         // アプリが背面に回る・画面を離れるタイミングでは待たずに保存する。
         .onChange(of: scenePhase) { _, phase in if phase != .active { saveNow() } }
         .onDisappear { saveNow() }
@@ -216,7 +220,7 @@ struct TableScoreView: View {
     }
 
     private var rulePill: some View {
-        let uma = rule.normalizedUma(playerCount: n)
+        let uma = rule.normalizedUma(playerCount: session.seatCount)
         let umaText = uma.map { $0.signedPointString }.joined(separator: "/")
         return VStack(alignment: .leading, spacing: 2) {
             Text("\(rule.startingPoints / 1000)000持ち \(rule.returnPoints / 1000)000返し")
@@ -247,11 +251,12 @@ struct TableScoreView: View {
     }
 
     private var hintText: String {
+        let rotation = isRotation ? "「抜け」のマスをタップすると、その回戦に抜ける人を変えられます。" : ""
         guard isRaw else {
-            return "マスをタップして、下のキーで入力します。各回、全員の合計が 0 になるように入力してください（1人だけ空欄なら杖のキーで自動補完）。"
+            return "マスをタップして、下のキーで入力します。各回、全員の合計が 0 になるように入力してください（1人だけ空欄なら杖のキーで自動補完）。" + rotation
         }
         return "マスをタップして、下のキーで終局時の持ち点を入力します。"
-            + "全員の合計が \(session.expectedTotalScore) 点になるのが目安です（1人だけ空欄なら杖のキーで自動補完）。"
+            + "全員の合計が \(session.expectedTotalScore) 点になるのが目安です（1人だけ空欄なら杖のキーで自動補完）。" + rotation
     }
 
     // MARK: アプリ内テンキー
@@ -416,10 +421,11 @@ struct TableScoreView: View {
     private func moveNext() {
         switch focus {
         case .cell(let r, let c)?:
-            if c + 1 < n {
-                focus = .cell(r, c + 1)
-            } else if r + 1 < rows.count {
-                focus = .cell(r + 1, 0)
+            // 同じ回戦の右側 → 次の回戦の左から、の順に抜け番のマスを飛ばして探す。
+            if let next = activeColumns(r).first(where: { $0 > c }) {
+                focus = .cell(r, next)
+            } else if r + 1 < rows.count, let first = activeColumns(r + 1).first {
+                focus = .cell(r + 1, first)
             } else {
                 focus = .chip(0)
             }
@@ -490,9 +496,13 @@ struct TableScoreView: View {
             gridCell(width: labelW, height: rowH, showRight: true) {
                 roundLabel(r, warn: warn)
             }
-            ForEach(Array(participants.enumerated()), id: \.element.id) { idx, _ in
+            ForEach(Array(participants.enumerated()), id: \.element.id) { idx, p in
                 gridCell(width: colW, height: rowH, showRight: idx < n - 1) {
-                    cellContent(r, idx, settlement: settlements?[safe: idx])
+                    if isSitOut(r, idx) {
+                        sitOutCell(r)
+                    } else {
+                        cellContent(r, idx, settlement: settlements?.first { $0.participantID == p.id })
+                    }
                 }
             }
         }
@@ -502,11 +512,12 @@ struct TableScoreView: View {
     /// 回戦ラベル。タップで削除・ヤキトリ指定のメニュー。
     private func roundLabel(_ r: Int, warn: Color?) -> some View {
         Menu {
+            if isRotation { sitOutMenuItems(r) }
             if isRaw && rule.tobiEnabled && rule.tobiPayee == .buster {
                 ForEach(tobiIndices(r), id: \.self) { c in
                     Menu("\(participants[c].name)を飛ばした人") {
                         ForEach(Array(participants.enumerated()), id: \.element.id) { idx, p in
-                            if idx != c {
+                            if idx != c && !isSitOut(r, idx) {
                                 Button {
                                     setBuster(r, c, p.id)
                                 } label: {
@@ -525,10 +536,12 @@ struct TableScoreView: View {
             if isRaw && rule.yakitoriEnabled {
                 Section("ヤキトリ（和了なし）") {
                     ForEach(Array(participants.enumerated()), id: \.element.id) { idx, p in
-                        Button {
-                            toggleYakitori(r, idx)
-                        } label: {
-                            Label(p.name, systemImage: isYakitori(r, idx) ? "checkmark.circle.fill" : "circle")
+                        if !isSitOut(r, idx) {
+                            Button {
+                                toggleYakitori(r, idx)
+                            } label: {
+                                Label(p.name, systemImage: isYakitori(r, idx) ? "checkmark.circle.fill" : "circle")
+                            }
                         }
                     }
                 }
@@ -601,19 +614,19 @@ struct TableScoreView: View {
     private func rowWarnColor(_ r: Int) -> Color? {
         let filled = rowFilledCount(r)
         guard filled > 0, rowDiff(r) != 0 else { return nil }
-        return filled == n ? Theme.accentRed : Theme.accentYellow
+        return filled == activeColumns(r).count ? Theme.accentRed : Theme.accentYellow
     }
 
     /// 想定合計とのズレ。ポイントモードは 0、素点モードは 配給原点×人数 が基準。
     private func rowDiff(_ r: Int) -> Int {
         guard r < rows.count else { return 0 }
-        let sum = rows[r].reduce(0) { $0 + (Int($1) ?? 0) }
+        let sum = activeColumns(r).reduce(0) { $0 + (Int(rows[r][$1]) ?? 0) }
         return isRaw ? sum - session.expectedTotalScore : sum
     }
 
     private func rowFilledCount(_ r: Int) -> Int {
         guard r < rows.count else { return 0 }
-        return rows[r].filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }.count
+        return activeColumns(r).filter { !rows[r][$0].trimmingCharacters(in: .whitespaces).isEmpty }.count
     }
 
     // MARK: 計算
@@ -624,13 +637,16 @@ struct TableScoreView: View {
         return RoundPersistence.settlement(row: rows[r],
                                            yakitori: yakitoriRow(r),
                                            busters: busterRow(r),
+                                           sitOut: sitOutAt(r),
                                            session: session)
     }
 
     /// その回戦・そのプレイヤーの確定ポイント（未確定なら 0）。
     private func pointValue(_ r: Int, _ c: Int) -> Int {
+        if isSitOut(r, c) { return 0 }
         if isRaw {
-            return settlements(for: r)?[safe: c]?.total ?? 0
+            let id = participants[c].id
+            return settlements(for: r)?.first { $0.participantID == id }?.total ?? 0
         }
         return cellValue(r, c)
     }
@@ -794,7 +810,7 @@ struct TableScoreView: View {
     /// その回戦でトビになっている人の列番号。
     private func tobiIndices(_ r: Int) -> [Int] {
         guard isRaw, rule.tobiEnabled, r < rows.count else { return [] }
-        return rows[r].indices.filter { c in
+        return activeColumns(r).filter { c in
             guard let v = Int(rows[r][c]) else { return false }
             return v < 0 || (rule.tobiIncludesZero && v == 0)
         }
@@ -837,10 +853,12 @@ struct TableScoreView: View {
                                         .font(AppFont.body(12)).foregroundStyle(Theme.inkSecond)
                                     FlowLayout(spacing: Space.sm) {
                                         ForEach(Array(participants.enumerated()), id: \.element.id) { idx, p in
-                                            Button { toggleYakitori(r, idx) } label: {
-                                                nameChip(p, selected: isYakitori(r, idx), tint: Theme.accentYellow)
+                                            if !isSitOut(r, idx) {
+                                                Button { toggleYakitori(r, idx) } label: {
+                                                    nameChip(p, selected: isYakitori(r, idx), tint: Theme.accentYellow)
+                                                }
+                                                .buttonStyle(.plain)
                                             }
-                                            .buttonStyle(.plain)
                                         }
                                     }
                                 }
@@ -854,7 +872,7 @@ struct TableScoreView: View {
                                             .font(AppFont.body(12)).foregroundStyle(Theme.inkSecond)
                                         FlowLayout(spacing: Space.sm) {
                                             ForEach(Array(participants.enumerated()), id: \.element.id) { idx, p in
-                                                if idx != c {
+                                                if idx != c && !isSitOut(r, idx) {
                                                     Button {
                                                         // もう一度押したら解除。
                                                         setBuster(r, c, busterAt(r, c) == p.id ? nil : p.id)
@@ -924,6 +942,7 @@ struct TableScoreView: View {
         yakitori = input.yakitori
         busters = input.busters
         chipText = input.chips
+        sitOut = input.sitOut
         ruleCache = session.rule
         loaded = true
     }
@@ -938,16 +957,18 @@ struct TableScoreView: View {
         rows.append(Array(repeating: "", count: n))
         yakitori.append(Array(repeating: false, count: n))
         busters.append(Array(repeating: nil, count: n))
+        sitOut.append(isRotation ? RoundPersistence.nextSitOut(after: sitOut.last ?? nil, participants: participants) : nil)
     }
 
     /// その回戦で空欄がちょうど1つなら、想定合計になるよう自動補完。
     private func autoBalance(_ r: Int) {
         guard r < rows.count else { return }
-        let emptyIdx = rows[r].indices.filter {
+        let active = activeColumns(r)
+        let emptyIdx = active.filter {
             rows[r][$0].trimmingCharacters(in: .whitespaces).isEmpty
         }
         guard emptyIdx.count == 1 else { return }
-        let sumOthers = rows[r].reduce(0) { $0 + (Int($1) ?? 0) }
+        let sumOthers = active.reduce(0) { $0 + (Int(rows[r][$1]) ?? 0) }
         let target = isRaw ? session.expectedTotalScore : 0
         rows[r][emptyIdx[0]] = "\(target - sumOthers)"
     }
@@ -967,10 +988,12 @@ struct TableScoreView: View {
         rows.remove(at: r)
         if r < yakitori.count { yakitori.remove(at: r) }
         if r < busters.count { busters.remove(at: r) }
+        if r < sitOut.count { sitOut.remove(at: r) }
         if rows.isEmpty {
             rows = [Array(repeating: "", count: n)]
             yakitori = [Array(repeating: false, count: n)]
             busters = [Array(repeating: nil, count: n)]
+            sitOut = [isRotation ? RoundPersistence.nextSitOut(after: nil, participants: participants) : nil]
         }
     }
 
@@ -1001,7 +1024,67 @@ struct TableScoreView: View {
     }
 
     private var currentInput: ScoreTableInput {
-        ScoreTableInput(rows: rows, yakitori: yakitori, busters: busters, chips: chipText)
+        ScoreTableInput(rows: rows, yakitori: yakitori, busters: busters, chips: chipText, sitOut: sitOut)
+    }
+
+    // MARK: 回し打ち（抜け番）
+
+    private func sitOutAt(_ r: Int) -> UUID? {
+        isRotation && r < sitOut.count ? sitOut[r] : nil
+    }
+
+    private func isSitOut(_ r: Int, _ c: Int) -> Bool {
+        guard let id = sitOutAt(r), c < n else { return false }
+        return participants[c].id == id
+    }
+
+    /// その回戦で卓についている人の列番号（抜け番を除く）。
+    private func activeColumns(_ r: Int) -> [Int] {
+        (0..<n).filter { !isSitOut(r, $0) }
+    }
+
+    /// 抜け番を変える。新しく抜ける人の入力は、その回戦では使わないので消しておく。
+    private func setSitOut(_ r: Int, _ id: UUID) {
+        guard isRotation, r < sitOut.count, sitOut[r] != id,
+              let c = participants.firstIndex(where: { $0.id == id }) else { return }
+        if r < rows.count, c < rows[r].count { rows[r][c] = "" }
+        if r < yakitori.count, c < yakitori[r].count { yakitori[r][c] = false }
+        if r < busters.count {
+            for k in busters[r].indices where k == c || busters[r][k] == id { busters[r][k] = nil }
+        }
+        if focus == .cell(r, c) { focus = nil }
+        sitOut[r] = id
+    }
+
+    /// 抜け番のマス。タップで抜ける人を選び直す。
+    private func sitOutCell(_ r: Int) -> some View {
+        Menu {
+            sitOutMenuItems(r)
+        } label: {
+            VStack(spacing: 2) {
+                Text("抜け")
+                    .font(AppFont.body(12, weight: .semibold))
+                    .foregroundStyle(Theme.inkFaint)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 8, weight: .semibold))
+                    .foregroundStyle(Theme.inkFaint)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Theme.sunken)
+            .contentShape(Rectangle())
+        }
+        .accessibilityLabel("\(r + 1)回戦は抜け番。タップで抜ける人を変える")
+    }
+
+    @ViewBuilder
+    private func sitOutMenuItems(_ r: Int) -> some View {
+        Section("\(r + 1)回戦に抜ける人") {
+            ForEach(participants) { p in
+                Button { setSitOut(r, p.id) } label: {
+                    Label(p.name, systemImage: sitOutAt(r) == p.id ? "checkmark.circle.fill" : "circle")
+                }
+            }
+        }
     }
 }
 

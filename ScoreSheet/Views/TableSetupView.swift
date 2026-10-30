@@ -46,6 +46,18 @@ struct TableSetupView: View {
                         }
                         .pickerStyle(.segmented)
                         .onChange(of: vm.gameType) { _, _ in vm.normalizeSelection() }
+                        if vm.canRotate {
+                            Toggle(isOn: $vm.isRotation) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("\(vm.gameType.rotationPlayerCount ?? 4)人で回す")
+                                        .font(AppFont.body(15)).foregroundStyle(Theme.ink)
+                                    Text("1回戦ごとに1人が抜け番。抜ける人は表で回戦ごとに選べます")
+                                        .font(AppFont.body(12)).foregroundStyle(Theme.inkFaint)
+                                }
+                            }
+                            .tint(Theme.accent)
+                            .onChange(of: vm.isRotation) { _, _ in vm.normalizeSelection() }
+                        }
                     }
 
                     // 入力方式

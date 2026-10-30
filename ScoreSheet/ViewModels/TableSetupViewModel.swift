@@ -5,6 +5,8 @@ import Observation
 @Observable
 final class TableSetupViewModel {
     var gameType: GameType
+    /// 回し打ち（三麻を4人で回す）。対応する種別のときだけ有効。
+    var isRotation: Bool = false
     var selectedPlayerIDs: [UUID] = []       // 並び順 = 席順の初期値
     var pointCoefficientPer1000: Double
     var chipPointCoefficient: Double
@@ -23,7 +25,14 @@ final class TableSetupViewModel {
         self.chipPointCoefficient = chipPointCoefficient
     }
 
-    var requiredCount: Int { gameType.playerCount }
+    /// 回し打ちが選べる種別か。
+    var canRotate: Bool { gameType.rotationPlayerCount != nil }
+
+    /// 選ぶ人数。回し打ちなら卓の人数＋1。
+    var requiredCount: Int {
+        if isRotation, let n = gameType.rotationPlayerCount { return n }
+        return gameType.playerCount
+    }
 
     func toggle(_ id: UUID) {
         if let idx = selectedPlayerIDs.firstIndex(of: id) {
@@ -37,6 +46,7 @@ final class TableSetupViewModel {
 
     /// 種別変更時、超過分の選択を切り詰める。
     func normalizeSelection() {
+        if !canRotate { isRotation = false }
         if selectedPlayerIDs.count > requiredCount {
             selectedPlayerIDs = Array(selectedPlayerIDs.prefix(requiredCount))
         }
@@ -70,6 +80,7 @@ final class TableSetupViewModel {
         let added = saved.tags.filter { !tags.contains($0) }
         tags.append(contentsOf: added)
         tagsFromRule = added
+        if !canRotate { isRotation = false }
         if selectedPlayerIDs.count > requiredCount {
             selectedPlayerIDs = Array(selectedPlayerIDs.prefix(requiredCount))
         }
@@ -93,7 +104,8 @@ final class TableSetupViewModel {
 
     var validationMessage: String? {
         if selectedPlayerIDs.count != requiredCount {
-            return "\(gameType.displayName)は\(requiredCount)人を選んでください（現在\(selectedPlayerIDs.count)人）"
+            let mode = isRotation ? "\(gameType.displayName)の\(requiredCount)人回し" : gameType.displayName
+            return "\(mode)は\(requiredCount)人を選んでください（現在\(selectedPlayerIDs.count)人）"
         }
         return nil
     }

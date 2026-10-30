@@ -185,7 +185,7 @@ struct HomeView: View {
         NoteCard(padding: Space.lg) {
             VStack(alignment: .leading, spacing: Space.sm) {
                 HStack {
-                    Text(session.gameType.displayName)
+                    Text(session.displayTitle)
                         .font(AppFont.label(12))
                         .foregroundStyle(Theme.mutedBlue)
                         .padding(.horizontal, Space.sm).padding(.vertical, 3)

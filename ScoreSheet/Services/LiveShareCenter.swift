@@ -227,7 +227,7 @@ final class LiveShareCenter: NSObject, ObservableObject {
         return [
             "v": protocolVersion,
             "t": session.id.uuidString,
-            "g": session.gameType.displayName,
+            "g": session.displayTitle,
             "m": String(members.prefix(40)),
         ]
     }

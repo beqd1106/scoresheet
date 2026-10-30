@@ -82,6 +82,24 @@ final class TableSession {
         return text
     }
 
+    /// 1回戦で卓につく人数（三麻 3・四麻 4）。
+    var seatCount: Int { gameType.playerCount }
+
+    /// 回し打ち（例：三麻を4人で回す）か。参加者が卓の人数より多いときに true。
+    var isRotation: Bool { participants.count > seatCount }
+
+    /// 画面に出す種別名（回し打ちなら「三麻・四人回し」）。
+    var displayTitle: String {
+        isRotation ? "\(gameType.displayName)・\(participants.count)人回し" : gameType.displayName
+    }
+
+    /// その回戦で抜け番だった人。回し打ちでなければ nil。
+    /// 抜け番の人はその回戦の記録（points）に含めない。
+    func sitOutID(in round: RoundResult) -> UUID? {
+        guard isRotation else { return nil }
+        return participants.first { p in !round.points.contains { $0.participantID == p.id } }?.id
+    }
+
     /// すでに点数が入力されているか（入力方式の切り替え可否の判定に使う）。
     var hasEnteredScores: Bool {
         rounds.contains { round in
@@ -91,7 +109,7 @@ final class TableSession {
 
     /// 素点入力時に全員の持ち点合計が一致すべき値。
     var expectedTotalScore: Int {
-        rule.expectedTotalScore(playerCount: gameType.playerCount)
+        rule.expectedTotalScore(playerCount: seatCount)
     }
 
     /// 回戦番号順に並べた回戦一覧。

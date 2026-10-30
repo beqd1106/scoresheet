@@ -220,7 +220,8 @@ enum ScoreCalculator {
 
     /// 順位の集計に数える回戦（空行・入力途中を除く）。
     static func countedRounds(_ session: TableSession) -> [RoundResult] {
-        session.rounds.filter { $0.isCounted(playerCount: session.participants.count) }
+        // 回し打ちでは抜け番の人が記録に入らないため、卓の人数で判定する。
+        session.rounds.filter { $0.isCounted(playerCount: session.seatCount) }
     }
 
     // MARK: - 推移グラフ用

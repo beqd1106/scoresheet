@@ -34,7 +34,7 @@ final class FinalResultViewModel {
         let df = DateFormatter()
         df.dateFormat = "yyyy/MM/dd"
         var lines: [String] = [
-            "【\(session.gameType.displayName) 結果】\(df.string(from: session.date))　\(session.rounds.count)回戦"
+            "【\(session.displayTitle) 結果】\(df.string(from: session.date))　\(session.rounds.count)回戦"
         ]
         if session.inputMode == .rawScore {
             let rule = session.rule
